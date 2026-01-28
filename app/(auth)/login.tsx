@@ -1,0 +1,173 @@
+import { useState } from 'react';
+import { View, Text, TextInput, TouchableOpacity, Image, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { useRouter, Link } from 'expo-router';
+import { ScreenContainer } from '@/components/screen-container';
+import { useApp } from '@/lib/store';
+import { IconSymbol } from '@/components/ui/icon-symbol';
+
+export default function LoginScreen() {
+  const router = useRouter();
+  const { dispatch } = useApp();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  
+  const handleLogin = async () => {
+    if (!email || !password) {
+      setError('Please fill in all fields');
+      return;
+    }
+    
+    setIsLoading(true);
+    setError('');
+    
+    // Simulate login - in production, call your auth API
+    setTimeout(() => {
+      dispatch({ 
+        type: 'LOGIN', 
+        payload: { 
+          id: '1', 
+          email, 
+          name: email.split('@')[0] 
+        } 
+      });
+      setIsLoading(false);
+      router.replace('/(tabs)');
+    }, 1000);
+  };
+  
+  return (
+    <ScreenContainer edges={['top', 'bottom', 'left', 'right']}>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        className="flex-1"
+      >
+        <ScrollView 
+          contentContainerStyle={{ flexGrow: 1 }}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View className="flex-1 bg-background px-6 justify-center">
+            {/* Logo */}
+            <View className="items-center mb-12">
+              <Image 
+                source={require('@/assets/images/icon.png')} 
+                style={{ width: 80, height: 80, borderRadius: 16, marginBottom: 16 }}
+              />
+              <Text className="text-3xl font-bold text-foreground">Welcome Back</Text>
+              <Text className="text-muted text-base mt-2">Sign in to continue trading</Text>
+            </View>
+            
+            {/* Error Message */}
+            {error ? (
+              <View className="bg-error/20 border border-error rounded-xl p-4 mb-6">
+                <Text className="text-error text-center">{error}</Text>
+              </View>
+            ) : null}
+            
+            {/* Form */}
+            <View className="gap-4 mb-8">
+              {/* Email */}
+              <View>
+                <Text className="text-muted text-sm mb-2">Email</Text>
+                <View className="flex-row items-center bg-surface border border-border rounded-xl px-4">
+                  <IconSymbol name="envelope.fill" size={20} color="#8B92A0" />
+                  <TextInput
+                    value={email}
+                    onChangeText={setEmail}
+                    placeholder="Enter your email"
+                    placeholderTextColor="#6B7280"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoComplete="email"
+                    className="flex-1 py-4 px-3 text-foreground text-base"
+                  />
+                </View>
+              </View>
+              
+              {/* Password */}
+              <View>
+                <Text className="text-muted text-sm mb-2">Password</Text>
+                <View className="flex-row items-center bg-surface border border-border rounded-xl px-4">
+                  <IconSymbol name="lock.fill" size={20} color="#8B92A0" />
+                  <TextInput
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="Enter your password"
+                    placeholderTextColor="#6B7280"
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    className="flex-1 py-4 px-3 text-foreground text-base"
+                  />
+                  <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
+                    <IconSymbol 
+                      name={showPassword ? "eye.slash.fill" : "eye.fill"} 
+                      size={20} 
+                      color="#8B92A0" 
+                    />
+                  </TouchableOpacity>
+                </View>
+              </View>
+              
+              {/* Forgot Password */}
+              <TouchableOpacity className="self-end">
+                <Text className="text-primary text-sm">Forgot Password?</Text>
+              </TouchableOpacity>
+            </View>
+            
+            {/* Login Button */}
+            <TouchableOpacity
+              onPress={handleLogin}
+              disabled={isLoading}
+              className="bg-primary py-4 rounded-2xl items-center mb-6"
+              style={{
+                shadowColor: '#00F0FF',
+                shadowOffset: { width: 0, height: 0 },
+                shadowOpacity: 0.5,
+                shadowRadius: 20,
+                opacity: isLoading ? 0.7 : 1,
+              }}
+            >
+              <Text className="text-background font-bold text-lg">
+                {isLoading ? 'Signing In...' : 'Sign In'}
+              </Text>
+            </TouchableOpacity>
+            
+            {/* Divider */}
+            <View className="flex-row items-center mb-6">
+              <View className="flex-1 h-px bg-border" />
+              <Text className="text-muted mx-4">or</Text>
+              <View className="flex-1 h-px bg-border" />
+            </View>
+            
+            {/* Demo Mode Button */}
+            <TouchableOpacity
+              onPress={() => {
+                dispatch({ type: 'SET_DEMO_MODE', payload: true });
+                dispatch({ 
+                  type: 'LOGIN', 
+                  payload: { id: 'demo', email: 'demo@insydetradar.com', name: 'Demo User' } 
+                });
+                router.replace('/(tabs)');
+              }}
+              className="border-2 border-accent py-4 rounded-2xl items-center mb-8"
+            >
+              <Text className="text-accent font-bold text-lg">Try Demo Mode</Text>
+            </TouchableOpacity>
+            
+            {/* Sign Up Link */}
+            <View className="flex-row justify-center">
+              <Text className="text-muted">Don't have an account? </Text>
+              <Link href="/(auth)/signup" asChild>
+                <TouchableOpacity>
+                  <Text className="text-primary font-semibold">Sign Up</Text>
+                </TouchableOpacity>
+              </Link>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </ScreenContainer>
+  );
+}
