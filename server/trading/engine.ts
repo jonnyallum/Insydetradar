@@ -13,6 +13,15 @@ import { SignalGenerator, getSignalGenerator, type TradingSignal } from './signa
 import { RiskManager, getRiskManager, type PortfolioState, type PositionInfo } from './risk-manager';
 import type { OHLCV } from './indicators';
 import { notificationService } from '../notification-service';
+import { getDb } from '../db';
+import {
+    trades,
+    positions as positionsTable,
+    tradingSignals as signalsTable,
+    portfolioSnapshots,
+    auditLogs
+} from '../../drizzle/schema';
+import { eq, and, desc } from 'drizzle-orm';
 
 // ============================================
 // TYPES
@@ -226,6 +235,7 @@ export class TradingEngine {
             const emergencyCheck = this.riskManager.shouldEmergencyLiquidate(portfolio);
             if (emergencyCheck.shouldLiquidate) {
                 console.error(`[TradingEngine] Emergency liquidation triggered: ${emergencyCheck.reason}`);
+                await this.logActivity('risk', `Emergency liquidation triggered: ${emergencyCheck.reason}`, 'critical');
                 await this.emergencyStop();
                 return;
             }
@@ -237,6 +247,9 @@ export class TradingEngine {
             if (portfolio.positions.length < this.riskManager.getStatus().limits.maxPositions) {
                 await this.scanForOpportunities(portfolio);
             }
+
+            // 7. Data persistence (Snapshot once per hour or if PnL changed significantly)
+            await this.persistPortfolioSnapshot(portfolio);
 
         } catch (error) {
             this.addError(`Trading cycle error: ${error}`);
@@ -335,9 +348,49 @@ export class TradingEngine {
             try {
                 await this.client.closePosition(symbol);
                 this.todayTrades++;
+
+                await this.logActivity('order', `Closed position for ${symbol}: ${reasons[symbol]}`, 'info', { symbol });
             } catch (error) {
                 this.addError(`Failed to close ${symbol}: ${error}`);
+                await this.logActivity('error', `Failed to close ${symbol}: ${error}`, 'error', { symbol, error: String(error) });
             }
+        }
+
+        // Sync local positions table with Alpaca reality
+        await this.syncPositionsToDb(portfolio.positions);
+    }
+
+    private async syncPositionsToDb(alpacaPositions: PositionInfo[]): Promise<void> {
+        const db = await getDb();
+        if (!db || !this.config.ownerId) return;
+
+        try {
+            // Mark all current open positions in DB as closed first (soft reset for this user)
+            // A more robust way would be to diff them, but this ensures sync
+            await db.update(positionsTable)
+                .set({ isOpen: false, closedAt: new Date() })
+                .where(and(eq(positionsTable.userId, this.config.ownerId), eq(positionsTable.isOpen, true)));
+
+            for (const pos of alpacaPositions) {
+                await db.insert(positionsTable).values({
+                    userId: this.config.ownerId,
+                    accountId: 0, // Placeholder, usually would match trading_accounts.id
+                    symbol: pos.symbol,
+                    side: pos.side,
+                    quantity: pos.quantity.toString(),
+                    quantityAvailable: pos.quantity.toString(),
+                    avgEntryPrice: (pos.costBasis / pos.quantity).toFixed(4),
+                    currentPrice: (pos.marketValue / pos.quantity).toFixed(4),
+                    marketValue: pos.marketValue.toFixed(4),
+                    costBasis: pos.costBasis.toFixed(4),
+                    unrealizedPnl: pos.unrealizedPnL.toFixed(4),
+                    unrealizedPnlPercent: pos.unrealizedPnLPercent.toFixed(4),
+                    isOpen: true,
+                    openedAt: new Date(), // We don't have the exact entry time from this object
+                } as any);
+            }
+        } catch (error) {
+            console.error('[TradingEngine] Failed to sync positions to DB:', error);
         }
     }
 
@@ -471,6 +524,48 @@ export class TradingEngine {
 
             console.log(`[TradingEngine] ✅ Order submitted: ${order.id}`);
 
+            // Persist to DB
+            const db = await getDb();
+            if (db && this.config.ownerId) {
+                // Log Signal
+                const [dbSignal] = await db.insert(signalsTable).values({
+                    symbol,
+                    signalType: signal.signalType,
+                    confidence: signal.confidence.toString(),
+                    strength: signal.strength,
+                    indicators: signal.indicators,
+                    reason: signal.reason,
+                    targetPrice: signal.targetPrice?.toString(),
+                    stopLossPrice: signal.stopLossPrice?.toString(),
+                    takeProfitPrice: signal.takeProfitPrice?.toString(),
+                    wasExecuted: true,
+                    executedAt: new Date(),
+                } as any).returning();
+
+                // Log Trade
+                await db.insert(trades).values({
+                    userId: this.config.ownerId,
+                    accountId: 0,
+                    alpacaOrderId: order.id,
+                    symbol,
+                    side: side,
+                    orderType: 'market', // assuming for now
+                    quantity: quantity.toString(),
+                    status: order.status,
+                    signalConfidence: signal.confidence.toString(),
+                    signalReason: signal.reason,
+                    submittedAt: new Date(),
+                } as any);
+
+                await this.logActivity('order', `Executed ${side.toUpperCase()} ${quantity} ${symbol}`, 'info', {
+                    orderId: order.id,
+                    symbol,
+                    side,
+                    quantity,
+                    signalId: dbSignal?.id
+                });
+            }
+
             // Notify owner
             if (this.config.ownerId) {
                 notificationService.sendToUser(
@@ -482,7 +577,65 @@ export class TradingEngine {
 
         } catch (error) {
             this.addError(`Failed to execute ${symbol} trade: ${error}`);
+            await this.logActivity('error', `Failed to execute ${symbol} trade: ${error}`, 'error', { symbol, error: String(error) });
             console.error(`[TradingEngine] ❌ Order failed:`, error);
+        }
+    }
+
+    private async logActivity(category: any, action: string, severity: any = 'info', details: any = {}): Promise<void> {
+        const db = await getDb();
+        if (!db || !this.config.ownerId) return;
+
+        try {
+            await db.insert(auditLogs).values({
+                userId: this.config.ownerId,
+                action,
+                category,
+                severity,
+                details,
+                createdAt: new Date(),
+            } as any);
+        } catch (error) {
+            console.error('[TradingEngine] Failed to log activity:', error);
+        }
+    }
+
+    private async persistPortfolioSnapshot(portfolio: PortfolioState): Promise<void> {
+        const db = await getDb();
+        if (!db || !this.config.ownerId) return;
+
+        try {
+            // Check if we already have a snapshot today (simple frequency control)
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            // Fetch last snapshot
+            const lastSnapshot = await db.query.portfolioSnapshots.findFirst({
+                where: eq(portfolioSnapshots.userId, this.config.ownerId),
+                orderBy: desc(portfolioSnapshots.snapshotDate),
+            });
+
+            // If last snapshot was more than 1 hour ago, take a new one
+            const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+            if (!lastSnapshot || lastSnapshot.snapshotDate < oneHourAgo) {
+                await db.insert(portfolioSnapshots).values({
+                    userId: this.config.ownerId,
+                    accountId: 0,
+                    snapshotDate: new Date(),
+                    portfolioValue: portfolio.portfolioValue.toFixed(4),
+                    cash: portfolio.cash.toFixed(4),
+                    equity: portfolio.equity.toFixed(4),
+                    buyingPower: portfolio.buyingPower.toFixed(4),
+                    dailyPnl: portfolio.dailyPnL.toFixed(4),
+                    dailyPnlPercent: ((portfolio.dailyPnL / portfolio.startOfDayValue) * 100).toFixed(4),
+                    openPositions: portfolio.positions.length,
+                    tradesExecuted: this.todayTrades,
+                } as any);
+
+                console.log(`[TradingEngine] 📊 Portfolio snapshot persisted for ${this.config.ownerId}`);
+            }
+        } catch (error) {
+            console.error('[TradingEngine] Failed to persist portfolio snapshot:', error);
         }
     }
 

@@ -23,8 +23,8 @@ import {
     getSignalGenerator,
 } from './trading';
 import { getDb } from './db';
-import { watchlists } from '../drizzle/schema';
-import { eq } from 'drizzle-orm';
+import { watchlists, auditLogs, portfolioSnapshots } from '../drizzle/schema';
+import { eq, desc, and } from 'drizzle-orm';
 import type { RiskLevel } from './alpaca/types';
 
 // ============================================
@@ -152,23 +152,43 @@ export const tradingRouter = router({
             period: z.enum(['1D', '1W', '1M', '3M', '1Y', 'all']).default('1D'),
             timeframe: z.enum(['1Min', '5Min', '15Min', '1H', '1D']).optional(),
         }).optional())
-        .query(async ({ input }) => {
+        .query(async ({ ctx, input }) => {
             if (!isAlpacaClientInitialized()) {
                 throw new Error('Broker not connected');
             }
 
             const client = getAlpacaClient();
-            const history = await client.getPortfolioHistory(input);
 
-            // Format for charts (filtering out nulls with type guard)
-            return history.timestamp.map((ts, i) => ({
-                timestamp: ts,
-                equity: history.equity[i],
-                profitLoss: history.profit_loss[i],
-                profitLossPct: history.profit_loss_pct[i],
-            })).filter((d): d is { timestamp: number; equity: number; profitLoss: number; profitLossPct: number } =>
-                d.equity !== null && d.profitLoss !== null && d.profitLossPct !== null
-            );
+            try {
+                const history = await client.getPortfolioHistory(input);
+                // Format for charts (filtering out nulls with type guard)
+                return history.timestamp.map((ts, i) => ({
+                    timestamp: ts,
+                    equity: history.equity[i],
+                    profitLoss: history.profit_loss[i],
+                    profitLossPct: history.profit_loss_pct[i],
+                })).filter((d): d is { timestamp: number; equity: number; profitLoss: number; profitLossPct: number } =>
+                    d.equity !== null && d.profitLoss !== null && d.profitLossPct !== null
+                );
+            } catch (error) {
+                console.warn('[TradingRouter] Alpaca history failed, falling back to tactical DB:', error);
+
+                const db = await getDb();
+                if (!db) return [];
+
+                const snapshots = await db.query.portfolioSnapshots.findMany({
+                    where: eq(portfolioSnapshots.userId, ctx.user.id),
+                    orderBy: desc(portfolioSnapshots.snapshotDate),
+                    limit: 100
+                });
+
+                return snapshots.reverse().map(s => ({
+                    timestamp: Math.floor(s.snapshotDate.getTime() / 1000),
+                    equity: parseFloat(s.equity),
+                    profitLoss: parseFloat(s.dailyPnl || '0'),
+                    profitLossPct: parseFloat(s.dailyPnlPercent || '0'),
+                }));
+            }
         }),
 
     /**
@@ -401,6 +421,9 @@ export const tradingRouter = router({
             engine: engine.getState(),
             config: engine.getConfig(),
             risk: riskManager.getStatus(),
+            broker: {
+                status: isAlpacaClientInitialized() ? 'authenticated' : 'disconnected',
+            },
         };
     }),
 
@@ -678,22 +701,34 @@ export const tradingRouter = router({
      * Get real-time neural processing logs
      */
     getNeuralLogs: protectedProcedure
-        .input(z.object({ limit: z.number().default(10) }).optional())
-        .query(async () => {
-            const logs = [
-                { id: '1', type: 'neural', message: 'Scanning S&P 500 components for RSI divergence...', status: 'complete' },
-                { id: '2', type: 'risk', message: 'Drawdown threshold hit 1.2% - tightening stop-losses across portfolio.', status: 'info' },
-                { id: '3', type: 'signal', message: 'Neural Signal: Strong Buy detected on BTC/USD @ $43,450.', status: 'success' },
-                { id: '4', type: 'neural', message: 'Re-evaluating sentiment scores for NVDA based on latest news volume.', status: 'active' },
-                { id: '5', type: 'risk', message: 'Position sizing adjusted for SOL/USD due to liquidity shift.', status: 'warning' },
-                { id: '6', type: 'neural', message: 'Pattern match found: Bullish Engulfing on AAPL (15m timeframe).', status: 'success' },
-                { id: '7', type: 'system', message: 'Neural processing load @ 24% - all systems nominal.', status: 'info' },
-                { id: '8', type: 'risk', message: 'Global circuit breaker active - monitoring macro news flow.', status: 'complete' },
-            ];
+        .input(z.object({ limit: z.number().default(20) }).optional())
+        .query(async ({ ctx, input }) => {
+            const db = await getDb();
+            if (!db) return [];
 
-            // Return a shifting subset to simulate activity
-            const offset = Math.floor(Date.now() / 5000) % logs.length;
-            return [...logs.slice(offset), ...logs.slice(0, offset)].slice(0, 10);
+            const logs = await db.query.auditLogs.findMany({
+                where: eq(auditLogs.userId, ctx.user.id),
+                orderBy: desc(auditLogs.createdAt),
+                limit: input?.limit ?? 20
+            });
+
+            if (logs.length === 0) {
+                // Fallback to initial system messages if no logs yet
+                return [
+                    { id: '1', type: 'system', message: 'Neural core initialized. Awaiting market data...', status: 'info' },
+                    { id: '2', type: 'system', message: 'Terminal connected to Supabase Tactical DB.', status: 'success' },
+                ];
+            }
+
+            return logs.map(log => ({
+                id: String(log.id),
+                type: log.category,
+                message: log.action,
+                status: log.severity === 'critical' ? 'error' :
+                    log.severity === 'error' ? 'error' :
+                        log.severity === 'warning' ? 'warning' : 'success',
+                timestamp: log.createdAt,
+            }));
         }),
 });
 

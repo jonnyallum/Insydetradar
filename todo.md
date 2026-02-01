@@ -57,10 +57,11 @@
 
 ## Backend Integration
 - [x] User authentication API
-- [ ] Portfolio data API
-- [ ] Market data integration
+- [x] Portfolio data API (Real-time Supabase sync)
+- [x] Market data integration (Alpaca API)
 - [x] Stripe payment integration
 - [x] Demo mode logic (trading simulator)
+- [x] Broker Protocol Connection UI (Alpaca)
 
 ## Polish & Testing
 - [ ] Animations and transitions

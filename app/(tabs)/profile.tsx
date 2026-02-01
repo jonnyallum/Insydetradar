@@ -5,7 +5,8 @@ import { ScreenContainer } from '@/components/screen-container';
 import { useApp, useAuth, useTrading } from '@/lib/store';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import * as Haptics from 'expo-haptics';
-import { Platform } from 'react-native';
+import { Platform, Modal, TextInput, ActivityIndicator, Linking } from 'react-native';
+import { trpc } from '@/lib/trpc';
 
 import { PremiumCard } from '@/components/ui/premium-card';
 
@@ -103,6 +104,15 @@ export default function ProfileScreen() {
   const { isDemoMode, setDemoMode } = useTrading();
   const { dispatch } = useApp();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [showBrokerModal, setShowBrokerModal] = useState(false);
+
+  // Broker Status
+  const brokerStatusQuery = trpc.trading.engineStatus.useQuery(undefined, {
+    enabled: !!user,
+    refetchInterval: 10000,
+  });
+
+  const isAlpacaConnected = brokerStatusQuery.data?.broker.status === 'authenticated';
 
   const handleLogout = () => {
     if (Platform.OS === 'web') {
@@ -182,10 +192,17 @@ export default function ProfileScreen() {
           </View>
         </PremiumCard>
 
-        {/* Trading Settings */}
+        {/* Trading Environment */}
         <View className="mb-8">
           <Text className="text-muted/60 text-[10px] font-black uppercase tracking-[0.2em] mb-4 px-1">Trading Environment</Text>
           <View className="gap-3">
+            <SettingsItem
+              icon="link"
+              label="Broker Protocol"
+              value={isAlpacaConnected ? 'CONNECTED' : 'NOT CONNECTED'}
+              onPress={() => setShowBrokerModal(true)}
+              color={isAlpacaConnected ? '#39FF14' : '#FFB800'}
+            />
             <SettingsToggle
               icon="power"
               label="Live Markets Access"
@@ -288,6 +305,153 @@ export default function ProfileScreen() {
           <Text className="text-muted/30 text-[9px] mt-1 font-bold">AUTONOMOUS TRADING INTERFACE</Text>
         </View>
       </ScrollView>
+
+      <BrokerConnectionModal
+        visible={showBrokerModal}
+        onClose={() => setShowBrokerModal(false)}
+        isDemoMode={isDemoMode}
+      />
     </ScreenContainer>
+  );
+}
+
+// ============================================
+// BROKER CONNECTION MODAL
+// ============================================
+
+function BrokerConnectionModal({
+  visible,
+  onClose,
+  isDemoMode,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  isDemoMode: boolean;
+}) {
+  const [apiKey, setApiKey] = useState('');
+  const [secretKey, setSecretKey] = useState('');
+  const connectBroker = trpc.trading.connectBroker.useMutation({
+    onSuccess: () => {
+      Alert.alert('PROTOCOL SECURED', 'Alpaca broker connection established successfully.');
+      onClose();
+    },
+    onError: (err) => {
+      Alert.alert('CONNECTION REJECTED', err.message);
+    }
+  });
+
+  const handleConnect = () => {
+    if (!apiKey || !secretKey) {
+      Alert.alert('MISSING CREDENTIALS', 'Both API Key and Secret Key are required for tactical sync.');
+      return;
+    }
+
+    connectBroker.mutate({
+      apiKey,
+      secretKey,
+      paper: isDemoMode,
+    });
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={onClose}
+    >
+      <View className="flex-1 bg-background">
+        {/* Header */}
+        <View className="flex-row justify-between items-center p-6 border-b border-border">
+          <TouchableOpacity onPress={onClose}>
+            <Text className="text-muted font-bold uppercase tracking-widest text-xs">Abort</Text>
+          </TouchableOpacity>
+          <Text className="text-foreground text-lg font-black uppercase tracking-tight">Broker Sync</Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <ScrollView className="flex-1 p-6">
+          <View className="bg-surface/50 rounded-3xl p-6 border border-border mb-8">
+            <View className="flex-row items-center mb-4">
+              <View className="w-10 h-10 rounded-xl bg-accent/20 items-center justify-center mr-4 border border-accent/30">
+                <IconSymbol name="link" size={20} color="#00F0FF" />
+              </View>
+              <View>
+                <Text className="text-foreground font-black uppercase tracking-tight">Alpaca Markets</Text>
+                <Text className="text-muted/60 text-[10px] font-bold uppercase tracking-widest">Broker Integration</Text>
+              </View>
+            </View>
+            <Text className="text-muted/40 text-[10px] leading-4 font-bold uppercase">
+              Enter your Alpaca API credentials to enable autonomous trading and real-time market data synchronization.
+            </Text>
+          </View>
+
+          {/* Mode Indicator */}
+          <View className={`mb-8 p-4 rounded-2xl border ${isDemoMode ? 'bg-warning/10 border-warning/20' : 'bg-success/10 border-success/20'}`}>
+            <Text className={`text-center font-black text-xs uppercase ${isDemoMode ? 'text-warning' : 'text-success'}`}>
+              Syncing to {isDemoMode ? 'Paper (Simulation)' : 'Live (Production)'} Protocol
+            </Text>
+          </View>
+
+          {/* API Key */}
+          <View className="mb-6">
+            <Text className="text-muted/60 text-[10px] font-black uppercase tracking-[0.2em] mb-2 px-1">API Key ID</Text>
+            <TextInput
+              value={apiKey}
+              onChangeText={setApiKey}
+              placeholder="APCA-API-KEY-ID"
+              placeholderTextColor="#4B5563"
+              className="bg-surface/50 border border-border rounded-2xl px-5 py-4 text-foreground font-bold"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+
+          {/* Secret Key */}
+          <View className="mb-10">
+            <Text className="text-muted/60 text-[10px] font-black uppercase tracking-[0.2em] mb-2 px-1">API Secret Key</Text>
+            <TextInput
+              value={secretKey}
+              onChangeText={setSecretKey}
+              placeholder="APCA-API-SECRET-KEY"
+              placeholderTextColor="#4B5563"
+              secureTextEntry
+              className="bg-surface/50 border border-border rounded-2xl px-5 py-4 text-foreground font-bold"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </View>
+
+          <TouchableOpacity
+            activeOpacity={0.8}
+            onPress={() => Linking.openURL('https://alpaca.markets/')}
+            className="flex-row items-center justify-center mb-10"
+          >
+            <Text className="text-muted/40 text-[10px] font-black uppercase mr-2">Don't have keys?</Text>
+            <Text className="text-accent text-[10px] font-black uppercase underline">Get them at Alpaca</Text>
+          </TouchableOpacity>
+        </ScrollView>
+
+        <View className="p-6 border-t border-border bg-background pb-10">
+          <TouchableOpacity
+            onPress={handleConnect}
+            disabled={connectBroker.isPending}
+            className="bg-primary py-5 rounded-3xl items-center"
+            style={[
+              { shadowColor: '#00F0FF', shadowOpacity: 0.4, shadowRadius: 20 },
+              { opacity: connectBroker.isPending ? 0.3 : 1 }
+            ]}
+          >
+            {connectBroker.isPending ? (
+              <ActivityIndicator color="#0A0A0F" />
+            ) : (
+              <Text className="text-background font-black text-lg uppercase tracking-tight">
+                Establish Protocol
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
   );
 }
