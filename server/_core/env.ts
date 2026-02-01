@@ -7,4 +7,12 @@ export const ENV = {
   isProduction: process.env.NODE_ENV === "production",
   forgeApiUrl: process.env.BUILT_IN_FORGE_API_URL ?? "",
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
+
+  // Broker
+  alpacaApiKey: process.env.ALPACA_API_KEY ?? "",
+  alpacaSecretKey: process.env.ALPACA_SECRET_KEY ?? "",
+  alpacaPaper: process.env.ALPACA_PAPER !== "false",
+
+  // Stripe
+  stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? "",
 };
