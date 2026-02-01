@@ -94,7 +94,11 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       console.log(`[Database] Triggering tactical onboard for: ${values.email}`);
       emailSync.syncUser({
         email: values.email,
-        name: values.name || null
+        name: values.name || null,
+        metadata: {
+          userId: values.openId,
+          source: user.metadata?.source || 'App Signup'
+        }
       }).catch(err => console.error('[Database] Email sync failed:', err));
 
       emailSync.sendWelcome(values.email, values.name || 'Operative')
