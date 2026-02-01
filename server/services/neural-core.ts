@@ -8,7 +8,7 @@ export const neuralCore = {
      */
     async refineSignal(symbol: string, indicators: any) {
         try {
-            const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+            const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
             const prompt = `
         ACT AS AN ELITE QUANTITATIVE ANALYST.
