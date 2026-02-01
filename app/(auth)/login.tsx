@@ -4,6 +4,8 @@ import { useRouter, Link } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { useApp } from '@/lib/store';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { trpc } from '@/lib/trpc';
+import * as Haptics from 'expo-haptics';
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -11,61 +13,74 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  
+
+  const loginMutation = trpc.auth.login.useMutation({
+    onSuccess: (data) => {
+      if (Platform.OS !== 'web') {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      }
+
+      dispatch({
+        type: 'LOGIN',
+        payload: {
+          id: data.user.id.toString(),
+          email: data.user.email || '',
+          name: data.user.email?.split('@')[0] || 'User'
+        }
+      });
+
+      if (!data.user.isEmailVerified) {
+        router.push('/(auth)/verify' as any);
+      } else {
+        router.replace('/(tabs)' as any);
+      }
+    },
+    onError: (err) => {
+      if (Platform.OS !== 'web') {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      }
+      setError(err.message);
+    }
+  });
+
   const handleLogin = async () => {
     if (!email || !password) {
-      setError('Please fill in all fields');
+      setError('Operational credentials required for access.');
       return;
     }
-    
-    setIsLoading(true);
     setError('');
-    
-    // Simulate login - in production, call your auth API
-    setTimeout(() => {
-      dispatch({ 
-        type: 'LOGIN', 
-        payload: { 
-          id: '1', 
-          email, 
-          name: email.split('@')[0] 
-        } 
-      });
-      setIsLoading(false);
-      router.replace('/(tabs)');
-    }, 1000);
+    loginMutation.mutate({ email, password });
   };
-  
+
   return (
     <ScreenContainer edges={['top', 'bottom', 'left', 'right']}>
-      <KeyboardAvoidingView 
+      <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         className="flex-1"
       >
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={{ flexGrow: 1 }}
           keyboardShouldPersistTaps="handled"
         >
           <View className="flex-1 bg-background px-6 justify-center">
             {/* Logo */}
             <View className="items-center mb-12">
-              <Image 
-                source={require('@/assets/images/icon.png')} 
+              <Image
+                source={require('@/assets/images/icon.png')}
                 style={{ width: 80, height: 80, borderRadius: 16, marginBottom: 16 }}
               />
               <Text className="text-3xl font-bold text-foreground">Welcome Back</Text>
               <Text className="text-muted text-base mt-2">Sign in to continue trading</Text>
             </View>
-            
+
             {/* Error Message */}
             {error ? (
               <View className="bg-error/20 border border-error rounded-xl p-4 mb-6">
                 <Text className="text-error text-center">{error}</Text>
               </View>
             ) : null}
-            
+
             {/* Form */}
             <View className="gap-4 mb-8">
               {/* Email */}
@@ -85,7 +100,7 @@ export default function LoginScreen() {
                   />
                 </View>
               </View>
-              
+
               {/* Password */}
               <View>
                 <Text className="text-muted text-sm mb-2">Password</Text>
@@ -101,53 +116,53 @@ export default function LoginScreen() {
                     className="flex-1 py-4 px-3 text-foreground text-base"
                   />
                   <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
-                    <IconSymbol 
-                      name={showPassword ? "eye.slash.fill" : "eye.fill"} 
-                      size={20} 
-                      color="#8B92A0" 
+                    <IconSymbol
+                      name={showPassword ? "eye.slash.fill" : "eye.fill"}
+                      size={20}
+                      color="#8B92A0"
                     />
                   </TouchableOpacity>
                 </View>
               </View>
-              
+
               {/* Forgot Password */}
               <TouchableOpacity className="self-end">
                 <Text className="text-primary text-sm">Forgot Password?</Text>
               </TouchableOpacity>
             </View>
-            
+
             {/* Login Button */}
             <TouchableOpacity
               onPress={handleLogin}
-              disabled={isLoading}
+              disabled={loginMutation.isPending}
               className="bg-primary py-4 rounded-2xl items-center mb-6"
               style={{
                 shadowColor: '#00F0FF',
                 shadowOffset: { width: 0, height: 0 },
                 shadowOpacity: 0.5,
                 shadowRadius: 20,
-                opacity: isLoading ? 0.7 : 1,
+                opacity: loginMutation.isPending ? 0.7 : 1,
               }}
             >
               <Text className="text-background font-bold text-lg">
-                {isLoading ? 'Signing In...' : 'Sign In'}
+                {loginMutation.isPending ? 'Signing In...' : 'Sign In'}
               </Text>
             </TouchableOpacity>
-            
+
             {/* Divider */}
             <View className="flex-row items-center mb-6">
               <View className="flex-1 h-px bg-border" />
               <Text className="text-muted mx-4">or</Text>
               <View className="flex-1 h-px bg-border" />
             </View>
-            
+
             {/* Demo Mode Button */}
             <TouchableOpacity
               onPress={() => {
                 dispatch({ type: 'SET_DEMO_MODE', payload: true });
-                dispatch({ 
-                  type: 'LOGIN', 
-                  payload: { id: 'demo', email: 'demo@insydetradar.com', name: 'Demo User' } 
+                dispatch({
+                  type: 'LOGIN',
+                  payload: { id: 'demo', email: 'demo@insydetradar.com', name: 'Demo User' }
                 });
                 router.replace('/(tabs)');
               }}
@@ -155,7 +170,7 @@ export default function LoginScreen() {
             >
               <Text className="text-accent font-bold text-lg">Try Demo Mode</Text>
             </TouchableOpacity>
-            
+
             {/* Sign Up Link */}
             <View className="flex-row justify-center">
               <Text className="text-muted">Don't have an account? </Text>

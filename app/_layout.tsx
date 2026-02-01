@@ -19,6 +19,9 @@ import type { EdgeInsets, Metrics, Rect } from "react-native-safe-area-context";
 
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
+import { registerForPushNotificationsAsync } from "@/lib/notifications";
+import * as Notifications from 'expo-notifications';
+import { useApp } from "@/lib/store";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -26,6 +29,33 @@ const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
 export const unstable_settings = {
   anchor: "(tabs)",
 };
+
+// Notification Manager Component
+function NotificationManager() {
+  const { state } = useApp();
+  const updateToken = trpc.auth.updatePushToken.useMutation();
+
+  useEffect(() => {
+    if (state.isAuthenticated) {
+      registerForPushNotificationsAsync().then(token => {
+        if (token) {
+          updateToken.mutate({ token });
+        }
+      });
+
+      // Listen for incoming notifications
+      const subscription = Notifications.addNotificationReceivedListener(notification => {
+        console.log('Notification received:', notification);
+      });
+
+      return () => {
+        subscription.remove();
+      };
+    }
+  }, [state.isAuthenticated]);
+
+  return null;
+}
 
 export default function RootLayout() {
   const initialInsets = initialWindowMetrics?.insets ?? DEFAULT_WEB_INSETS;
@@ -79,6 +109,7 @@ export default function RootLayout() {
       <AppProvider>
         <trpc.Provider client={trpcClient} queryClient={queryClient}>
           <QueryClientProvider client={queryClient}>
+            <NotificationManager />
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="(auth)" options={{ presentation: "fullScreenModal" }} />

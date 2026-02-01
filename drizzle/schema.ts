@@ -1,31 +1,53 @@
 import {
-  int,
-  mysqlEnum,
-  mysqlTable,
+  integer,
+  pgEnum,
+  pgTable,
   text,
   timestamp,
   varchar,
   decimal,
   boolean,
-  json,
+  jsonb,
   bigint,
   index,
-} from "drizzle-orm/mysql-core";
+  uuid,
+  serial,
+} from "drizzle-orm/pg-core";
+
+export const roleEnum = pgEnum("role", ["user", "admin"]);
+export const riskLevelEnum = pgEnum("risk_level", ["conservative", "moderate", "aggressive"]);
+export const assetClassEnum = pgEnum("asset_class", ["us_equity", "crypto"]);
+export const sideEnum = pgEnum("side", ["buy", "sell"]);
+export const positionSideEnum = pgEnum("position_side", ["long", "short"]);
+export const orderTypeEnum = pgEnum("order_type", ["market", "limit", "stop", "stop_limit", "trailing_stop"]);
+export const timeframeEnum = pgEnum("timeframe", ["1Min", "5Min", "15Min", "1Hour", "1Day"]);
+export const signalTypeEnum = pgEnum("signal_type", ["entry_long", "entry_short", "exit", "hold"]);
+export const signalStrengthEnum = pgEnum("signal_strength", ["weak", "moderate", "strong"]);
+export const auditCategoryEnum = pgEnum("audit_category", ["auth", "account", "order", "position", "system", "risk", "error"]);
+export const severityEnum = pgEnum("severity", ["info", "warning", "error", "critical"]);
+export const alertTypeEnum = pgEnum("alert_type", ["daily_loss_limit", "max_drawdown", "position_limit", "volatility_spike", "margin_call", "system_error", "circuit_breaker"]);
+export const riskSeverityEnum = pgEnum("risk_severity", ["warning", "critical"]);
+export const actionTakenEnum = pgEnum("action_taken", ["none", "notified_user", "paused_trading", "closed_positions", "emergency_stop"]);
+export const notificationTypeEnum = pgEnum("notification_type", ["trade_executed", "trade_filled", "trade_canceled", "position_closed", "risk_alert", "daily_summary", "deposit_received", "withdrawal_processed", "system_announcement"]);
 
 // ============================================
-// USERS TABLE (Existing)
+// USERS TABLE (PostgreSQL)
 // ============================================
 
-export const users = mysqlTable("users", {
-  id: int("id").autoincrement().primaryKey(),
-  openId: varchar("openId", { length: 64 }).notNull().unique(),
+export const users = pgTable("users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  openId: varchar("open_id", { length: 64 }).notNull().unique(),
   name: text("name"),
   email: varchar("email", { length: 320 }),
-  loginMethod: varchar("loginMethod", { length: 64 }),
-  role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
+  password: text("password"),
+  loginMethod: varchar("login_method", { length: 64 }),
+  role: roleEnum("role").default("user").notNull(),
+  isEmailVerified: boolean("is_email_verified").default(false).notNull(),
+  verificationCode: varchar("verification_code", { length: 6 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  lastSignedIn: timestamp("last_signed_in").defaultNow().notNull(),
+  pushToken: text("push_token"),
 });
 
 export type User = typeof users.$inferSelect;
@@ -35,42 +57,42 @@ export type InsertUser = typeof users.$inferInsert;
 // TRADING ACCOUNTS TABLE
 // ============================================
 
-export const tradingAccounts = mysqlTable("trading_accounts", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
+export const tradingAccounts = pgTable("trading_accounts", {
+  id: serial("id").primaryKey(),
+  userId: uuid("user_id").notNull(),
 
   // Alpaca Account Details
-  alpacaAccountId: varchar("alpacaAccountId", { length: 64 }).unique(),
-  accountNumber: varchar("accountNumber", { length: 32 }),
-  accountStatus: varchar("accountStatus", { length: 32 }),
+  alpacaAccountId: varchar("alpaca_account_id", { length: 64 }).unique(),
+  accountNumber: varchar("account_number", { length: 32 }),
+  accountStatus: varchar("account_status", { length: 32 }),
 
   // Mode: paper or live
-  isPaper: boolean("isPaper").default(true).notNull(),
+  isPaper: boolean("is_paper").default(true).notNull(),
 
   // Encrypted API credentials (stored securely)
-  encryptedApiKey: text("encryptedApiKey"),
-  encryptedSecretKey: text("encryptedSecretKey"),
+  encryptedApiKey: text("encrypted_api_key"),
+  encryptedSecretKey: text("encrypted_secret_key"),
 
   // Account Balances (synced from Alpaca)
-  portfolioValue: decimal("portfolioValue", { precision: 18, scale: 4 }).default("0"),
-  buyingPower: decimal("buyingPower", { precision: 18, scale: 4 }).default("0"),
+  portfolioValue: decimal("portfolio_value", { precision: 18, scale: 4 }).default("0"),
+  buyingPower: decimal("buying_power", { precision: 18, scale: 4 }).default("0"),
   cash: decimal("cash", { precision: 18, scale: 4 }).default("0"),
   equity: decimal("equity", { precision: 18, scale: 4 }).default("0"),
 
   // Trading Settings
-  tradingEnabled: boolean("tradingEnabled").default(false).notNull(),
-  riskLevel: mysqlEnum("riskLevel", ["conservative", "moderate", "aggressive"]).default("moderate").notNull(),
-  maxDailyLossPercent: decimal("maxDailyLossPercent", { precision: 5, scale: 2 }).default("5.00"),
-  maxDrawdownPercent: decimal("maxDrawdownPercent", { precision: 5, scale: 2 }).default("10.00"),
-  maxPositions: int("maxPositions").default(5),
+  tradingEnabled: boolean("trading_enabled").default(false).notNull(),
+  riskLevel: riskLevelEnum("risk_level").default("moderate").notNull(),
+  maxDailyLossPercent: decimal("max_daily_loss_percent", { precision: 5, scale: 2 }).default("5.00"),
+  maxDrawdownPercent: decimal("max_drawdown_percent", { precision: 5, scale: 2 }).default("10.00"),
+  maxPositions: integer("max_positions").default(5),
 
   // Sync timestamps
-  lastSyncAt: timestamp("lastSyncAt"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-}, (table) => ({
-  userIdIdx: index("trading_accounts_userId_idx").on(table.userId),
-}));
+  lastSyncAt: timestamp("last_sync_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [{
+  userIdIdx: index("trading_accounts_user_id_idx").on(table.userId),
+}]);
 
 export type TradingAccount = typeof tradingAccounts.$inferSelect;
 export type InsertTradingAccount = typeof tradingAccounts.$inferInsert;
@@ -79,57 +101,57 @@ export type InsertTradingAccount = typeof tradingAccounts.$inferInsert;
 // TRADES TABLE
 // ============================================
 
-export const trades = mysqlTable("trades", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  accountId: int("accountId").notNull(),
+export const trades = pgTable("trades", {
+  id: serial("id").primaryKey(),
+  userId: uuid("user_id").notNull(),
+  accountId: integer("account_id").notNull(),
 
   // Order/Trade Identification
-  alpacaOrderId: varchar("alpacaOrderId", { length: 64 }).unique(),
-  clientOrderId: varchar("clientOrderId", { length: 64 }),
+  alpacaOrderId: varchar("alpaca_order_id", { length: 64 }).unique(),
+  clientOrderId: varchar("client_order_id", { length: 64 }),
 
   // Asset Details
   symbol: varchar("symbol", { length: 16 }).notNull(),
-  assetClass: mysqlEnum("assetClass", ["us_equity", "crypto"]).default("us_equity"),
+  assetClass: assetClassEnum("asset_class").default("us_equity"),
 
   // Order Details
-  side: mysqlEnum("side", ["buy", "sell"]).notNull(),
-  orderType: mysqlEnum("orderType", ["market", "limit", "stop", "stop_limit", "trailing_stop"]).notNull(),
-  timeInForce: varchar("timeInForce", { length: 8 }),
+  side: sideEnum("side").notNull(),
+  orderType: orderTypeEnum("order_type").notNull(),
+  timeInForce: varchar("time_in_force", { length: 8 }),
   quantity: decimal("quantity", { precision: 18, scale: 8 }).notNull(),
-  filledQuantity: decimal("filledQuantity", { precision: 18, scale: 8 }).default("0"),
+  filledQuantity: decimal("filled_quantity", { precision: 18, scale: 8 }).default("0"),
 
   // Prices
-  limitPrice: decimal("limitPrice", { precision: 18, scale: 4 }),
-  stopPrice: decimal("stopPrice", { precision: 18, scale: 4 }),
-  filledAvgPrice: decimal("filledAvgPrice", { precision: 18, scale: 4 }),
+  limitPrice: decimal("limit_price", { precision: 18, scale: 4 }),
+  stopPrice: decimal("stop_price", { precision: 18, scale: 4 }),
+  filledAvgPrice: decimal("filled_avg_price", { precision: 18, scale: 4 }),
 
   // Status
   status: varchar("status", { length: 32 }).notNull(),
 
   // Signal/Strategy Info
-  signalConfidence: decimal("signalConfidence", { precision: 5, scale: 4 }),
-  signalReason: text("signalReason"),
-  strategyId: varchar("strategyId", { length: 64 }),
+  signalConfidence: decimal("signal_confidence", { precision: 5, scale: 4 }),
+  signalReason: text("signal_reason"),
+  strategyId: varchar("strategy_id", { length: 64 }),
 
   // P&L (calculated after close)
-  realizedPnl: decimal("realizedPnl", { precision: 18, scale: 4 }),
-  realizedPnlPercent: decimal("realizedPnlPercent", { precision: 8, scale: 4 }),
+  realizedPnl: decimal("realized_pnl", { precision: 18, scale: 4 }),
+  realizedPnlPercent: decimal("realized_pnl_percent", { precision: 8, scale: 4 }),
 
   // Timestamps
-  submittedAt: timestamp("submittedAt"),
-  filledAt: timestamp("filledAt"),
-  canceledAt: timestamp("canceledAt"),
-  expiredAt: timestamp("expiredAt"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-}, (table) => ({
-  userIdIdx: index("trades_userId_idx").on(table.userId),
-  accountIdIdx: index("trades_accountId_idx").on(table.accountId),
+  submittedAt: timestamp("submitted_at"),
+  filledAt: timestamp("filled_at"),
+  canceledAt: timestamp("canceled_at"),
+  expiredAt: timestamp("expired_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [{
+  userIdIdx: index("trades_user_id_idx").on(table.userId),
+  accountIdIdx: index("trades_account_id_idx").on(table.accountId),
   symbolIdx: index("trades_symbol_idx").on(table.symbol),
   statusIdx: index("trades_status_idx").on(table.status),
-  createdAtIdx: index("trades_createdAt_idx").on(table.createdAt),
-}));
+  createdAtIdx: index("trades_created_at_idx").on(table.createdAt),
+}]);
 
 export type Trade = typeof trades.$inferSelect;
 export type InsertTrade = typeof trades.$inferInsert;
@@ -138,52 +160,52 @@ export type InsertTrade = typeof trades.$inferInsert;
 // POSITIONS TABLE
 // ============================================
 
-export const positions = mysqlTable("positions", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  accountId: int("accountId").notNull(),
+export const positions = pgTable("positions", {
+  id: serial("id").primaryKey(),
+  userId: uuid("user_id").notNull(),
+  accountId: integer("account_id").notNull(),
 
   // Asset Details
   symbol: varchar("symbol", { length: 16 }).notNull(),
-  assetId: varchar("assetId", { length: 64 }),
-  assetClass: mysqlEnum("assetClass", ["us_equity", "crypto"]).default("us_equity"),
+  assetId: varchar("asset_id", { length: 64 }),
+  assetClass: assetClassEnum("asset_class").default("us_equity"),
   exchange: varchar("exchange", { length: 16 }),
 
   // Position Details
-  side: mysqlEnum("side", ["long", "short"]).notNull(),
+  side: positionSideEnum("side").notNull(),
   quantity: decimal("quantity", { precision: 18, scale: 8 }).notNull(),
-  quantityAvailable: decimal("quantityAvailable", { precision: 18, scale: 8 }).notNull(),
-  avgEntryPrice: decimal("avgEntryPrice", { precision: 18, scale: 4 }).notNull(),
-  currentPrice: decimal("currentPrice", { precision: 18, scale: 4 }),
-  marketValue: decimal("marketValue", { precision: 18, scale: 4 }),
-  costBasis: decimal("costBasis", { precision: 18, scale: 4 }),
+  quantityAvailable: decimal("quantity_available", { precision: 18, scale: 8 }).notNull(),
+  avgEntryPrice: decimal("avg_entry_price", { precision: 18, scale: 4 }).notNull(),
+  currentPrice: decimal("current_price", { precision: 18, scale: 4 }),
+  marketValue: decimal("market_value", { precision: 18, scale: 4 }),
+  costBasis: decimal("cost_basis", { precision: 18, scale: 4 }),
 
   // P&L
-  unrealizedPnl: decimal("unrealizedPnl", { precision: 18, scale: 4 }).default("0"),
-  unrealizedPnlPercent: decimal("unrealizedPnlPercent", { precision: 8, scale: 4 }).default("0"),
-  intradayPnl: decimal("intradayPnl", { precision: 18, scale: 4 }).default("0"),
+  unrealizedPnl: decimal("unrealized_pnl", { precision: 18, scale: 4 }).default("0"),
+  unrealizedPnlPercent: decimal("unrealized_pnl_percent", { precision: 8, scale: 4 }).default("0"),
+  intradayPnl: decimal("intraday_pnl", { precision: 18, scale: 4 }).default("0"),
 
   // Risk Management
-  stopLossPrice: decimal("stopLossPrice", { precision: 18, scale: 4 }),
-  takeProfitPrice: decimal("takeProfitPrice", { precision: 18, scale: 4 }),
-  stopLossOrderId: varchar("stopLossOrderId", { length: 64 }),
-  takeProfitOrderId: varchar("takeProfitOrderId", { length: 64 }),
+  stopLossPrice: decimal("stop_loss_price", { precision: 18, scale: 4 }),
+  takeProfitPrice: decimal("take_profit_price", { precision: 18, scale: 4 }),
+  stopLossOrderId: varchar("stop_loss_order_id", { length: 64 }),
+  takeProfitOrderId: varchar("take_profit_order_id", { length: 64 }),
 
   // Status
-  isOpen: boolean("isOpen").default(true).notNull(),
+  isOpen: boolean("is_open").default(true).notNull(),
 
   // Timestamps
-  openedAt: timestamp("openedAt").notNull(),
-  closedAt: timestamp("closedAt"),
-  lastSyncAt: timestamp("lastSyncAt"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-}, (table) => ({
-  userIdIdx: index("positions_userId_idx").on(table.userId),
-  accountIdIdx: index("positions_accountId_idx").on(table.accountId),
+  openedAt: timestamp("opened_at").notNull(),
+  closedAt: timestamp("closed_at"),
+  lastSyncAt: timestamp("last_sync_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [{
+  userIdIdx: index("positions_user_id_idx").on(table.userId),
+  accountIdIdx: index("positions_account_id_idx").on(table.accountId),
   symbolIdx: index("positions_symbol_idx").on(table.symbol),
-  isOpenIdx: index("positions_isOpen_idx").on(table.isOpen),
-}));
+  isOpenIdx: index("positions_is_open_idx").on(table.isOpen),
+}]);
 
 export type Position = typeof positions.$inferSelect;
 export type InsertPosition = typeof positions.$inferInsert;
@@ -192,11 +214,11 @@ export type InsertPosition = typeof positions.$inferInsert;
 // MARKET DATA (Historical Bars)
 // ============================================
 
-export const marketBars = mysqlTable("market_bars", {
-  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+export const marketBars = pgTable("market_bars", {
+  id: serial("id").primaryKey(),
 
   symbol: varchar("symbol", { length: 16 }).notNull(),
-  timeframe: mysqlEnum("timeframe", ["1Min", "5Min", "15Min", "1Hour", "1Day"]).notNull(),
+  timeframe: timeframeEnum("timeframe").notNull(),
 
   open: decimal("open", { precision: 18, scale: 4 }).notNull(),
   high: decimal("high", { precision: 18, scale: 4 }).notNull(),
@@ -204,14 +226,14 @@ export const marketBars = mysqlTable("market_bars", {
   close: decimal("close", { precision: 18, scale: 4 }).notNull(),
   volume: bigint("volume", { mode: "number" }).notNull(),
   vwap: decimal("vwap", { precision: 18, scale: 4 }),
-  tradeCount: int("tradeCount"),
+  tradeCount: integer("trade_count"),
 
   timestamp: timestamp("timestamp").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-}, (table) => ({
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [{
   symbolTimeframeIdx: index("market_bars_symbol_timeframe_idx").on(table.symbol, table.timeframe),
   timestampIdx: index("market_bars_timestamp_idx").on(table.timestamp),
-}));
+}]);
 
 export type MarketBar = typeof marketBars.$inferSelect;
 export type InsertMarketBar = typeof marketBars.$inferInsert;
@@ -220,45 +242,45 @@ export type InsertMarketBar = typeof marketBars.$inferInsert;
 // TRADING SIGNALS
 // ============================================
 
-export const tradingSignals = mysqlTable("trading_signals", {
-  id: int("id").autoincrement().primaryKey(),
+export const tradingSignals = pgTable("trading_signals", {
+  id: serial("id").primaryKey(),
 
   symbol: varchar("symbol", { length: 16 }).notNull(),
-  assetClass: mysqlEnum("assetClass", ["us_equity", "crypto"]).default("us_equity"),
+  assetClass: assetClassEnum("asset_class").default("us_equity"),
 
   // Signal Details
-  signalType: mysqlEnum("signalType", ["entry_long", "entry_short", "exit", "hold"]).notNull(),
+  signalType: signalTypeEnum("signal_type").notNull(),
   confidence: decimal("confidence", { precision: 5, scale: 4 }).notNull(),
-  strength: mysqlEnum("strength", ["weak", "moderate", "strong"]).default("moderate"),
+  strength: signalStrengthEnum("strength").default("moderate"),
 
   // Technical Analysis Data
-  indicators: json("indicators"), // RSI, MACD, Bollinger, etc.
+  indicators: jsonb("indicators"), // RSI, MACD, Bollinger, etc.
   reason: text("reason"),
 
   // Entry/Exit Targets
-  targetPrice: decimal("targetPrice", { precision: 18, scale: 4 }),
-  stopLossPrice: decimal("stopLossPrice", { precision: 18, scale: 4 }),
-  takeProfitPrice: decimal("takeProfitPrice", { precision: 18, scale: 4 }),
+  targetPrice: decimal("target_price", { precision: 18, scale: 4 }),
+  stopLossPrice: decimal("stop_loss_price", { precision: 18, scale: 4 }),
+  takeProfitPrice: decimal("take_profit_price", { precision: 18, scale: 4 }),
 
   // Strategy
-  strategyId: varchar("strategyId", { length: 64 }),
-  strategyName: varchar("strategyName", { length: 128 }),
+  strategyId: varchar("strategy_id", { length: 64 }),
+  strategyName: varchar("strategy_name", { length: 128 }),
 
   // Execution Status
-  wasExecuted: boolean("wasExecuted").default(false),
-  executedAt: timestamp("executedAt"),
-  tradeId: int("tradeId"),
+  wasExecuted: boolean("was_executed").default(false),
+  executedAt: timestamp("executed_at"),
+  tradeId: integer("trade_id"),
 
   // Validity
-  validUntil: timestamp("validUntil"),
-  isActive: boolean("isActive").default(true),
+  validUntil: timestamp("valid_until"),
+  isActive: boolean("is_active").default(true),
 
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-}, (table) => ({
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [{
   symbolIdx: index("trading_signals_symbol_idx").on(table.symbol),
-  createdAtIdx: index("trading_signals_createdAt_idx").on(table.createdAt),
-  isActiveIdx: index("trading_signals_isActive_idx").on(table.isActive),
-}));
+  createdAtIdx: index("trading_signals_created_at_idx").on(table.createdAt),
+  isActiveIdx: index("trading_signals_is_active_idx").on(table.isActive),
+}]);
 
 export type TradingSignal = typeof tradingSignals.$inferSelect;
 export type InsertTradingSignal = typeof tradingSignals.$inferInsert;
@@ -267,42 +289,42 @@ export type InsertTradingSignal = typeof tradingSignals.$inferInsert;
 // PORTFOLIO SNAPSHOTS (Daily Performance)
 // ============================================
 
-export const portfolioSnapshots = mysqlTable("portfolio_snapshots", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  accountId: int("accountId").notNull(),
+export const portfolioSnapshots = pgTable("portfolio_snapshots", {
+  id: serial("id").primaryKey(),
+  userId: uuid("user_id").notNull(),
+  accountId: integer("account_id").notNull(),
 
   // Snapshot Date
-  snapshotDate: timestamp("snapshotDate").notNull(),
+  snapshotDate: timestamp("snapshot_date").notNull(),
 
   // Values
-  portfolioValue: decimal("portfolioValue", { precision: 18, scale: 4 }).notNull(),
+  portfolioValue: decimal("portfolio_value", { precision: 18, scale: 4 }).notNull(),
   cash: decimal("cash", { precision: 18, scale: 4 }).notNull(),
   equity: decimal("equity", { precision: 18, scale: 4 }).notNull(),
-  buyingPower: decimal("buyingPower", { precision: 18, scale: 4 }).notNull(),
+  buyingPower: decimal("buying_power", { precision: 18, scale: 4 }).notNull(),
 
   // Daily P&L
-  dailyPnl: decimal("dailyPnl", { precision: 18, scale: 4 }).default("0"),
-  dailyPnlPercent: decimal("dailyPnlPercent", { precision: 8, scale: 4 }).default("0"),
+  dailyPnl: decimal("daily_pnl", { precision: 18, scale: 4 }).default("0"),
+  dailyPnlPercent: decimal("daily_pnl_percent", { precision: 8, scale: 4 }).default("0"),
 
   // Cumulative Stats
-  totalPnl: decimal("totalPnl", { precision: 18, scale: 4 }).default("0"),
-  totalPnlPercent: decimal("totalPnlPercent", { precision: 8, scale: 4 }).default("0"),
+  totalPnl: decimal("total_pnl", { precision: 18, scale: 4 }).default("0"),
+  totalPnlPercent: decimal("total_pnl_percent", { precision: 8, scale: 4 }).default("0"),
 
   // Performance Metrics
-  winRate: decimal("winRate", { precision: 5, scale: 2 }),
-  sharpeRatio: decimal("sharpeRatio", { precision: 8, scale: 4 }),
-  maxDrawdown: decimal("maxDrawdown", { precision: 8, scale: 4 }),
+  winRate: decimal("win_rate", { precision: 5, scale: 2 }),
+  sharpeRatio: decimal("sharpe_ratio", { precision: 8, scale: 4 }),
+  maxDrawdown: decimal("max_drawdown", { precision: 8, scale: 4 }),
 
   // Position Counts
-  openPositions: int("openPositions").default(0),
-  tradesExecuted: int("tradesExecuted").default(0),
+  openPositions: integer("open_positions").default(0),
+  tradesExecuted: integer("trades_executed").default(0),
 
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-}, (table) => ({
-  userIdIdx: index("portfolio_snapshots_userId_idx").on(table.userId),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [{
+  userIdIdx: index("portfolio_snapshots_user_id_idx").on(table.userId),
   snapshotDateIdx: index("portfolio_snapshots_date_idx").on(table.snapshotDate),
-}));
+}]);
 
 export type PortfolioSnapshot = typeof portfolioSnapshots.$inferSelect;
 export type InsertPortfolioSnapshot = typeof portfolioSnapshots.$inferInsert;
@@ -311,40 +333,32 @@ export type InsertPortfolioSnapshot = typeof portfolioSnapshots.$inferInsert;
 // AUDIT LOGS
 // ============================================
 
-export const auditLogs = mysqlTable("audit_logs", {
-  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
-  userId: int("userId"),
-  accountId: int("accountId"),
+export const auditLogs = pgTable("audit_logs", {
+  id: serial("id").primaryKey(),
+  userId: uuid("user_id"),
+  accountId: integer("account_id"),
 
   // Action Details
   action: varchar("action", { length: 64 }).notNull(),
-  category: mysqlEnum("category", [
-    "auth",
-    "account",
-    "order",
-    "position",
-    "system",
-    "risk",
-    "error",
-  ]).notNull(),
-  severity: mysqlEnum("severity", ["info", "warning", "error", "critical"]).default("info"),
+  category: auditCategoryEnum("category").notNull(),
+  severity: severityEnum("severity").default("info"),
 
   // Payload
-  details: json("details"),
-  ipAddress: varchar("ipAddress", { length: 45 }),
-  userAgent: text("userAgent"),
+  details: jsonb("details"),
+  ipAddress: varchar("ip_address", { length: 45 }),
+  userAgent: text("user_agent"),
 
   // Related Entities
-  orderId: varchar("orderId", { length: 64 }),
+  orderId: varchar("order_id", { length: 64 }),
   symbol: varchar("symbol", { length: 16 }),
 
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-}, (table) => ({
-  userIdIdx: index("audit_logs_userId_idx").on(table.userId),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [{
+  userIdIdx: index("audit_logs_user_id_idx").on(table.userId),
   actionIdx: index("audit_logs_action_idx").on(table.action),
   categoryIdx: index("audit_logs_category_idx").on(table.category),
-  createdAtIdx: index("audit_logs_createdAt_idx").on(table.createdAt),
-}));
+  createdAtIdx: index("audit_logs_created_at_idx").on(table.createdAt),
+}]);
 
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = typeof auditLogs.$inferInsert;
@@ -353,19 +367,19 @@ export type InsertAuditLog = typeof auditLogs.$inferInsert;
 // WATCHLISTS
 // ============================================
 
-export const watchlists = mysqlTable("watchlists", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
+export const watchlists = pgTable("watchlists", {
+  id: serial("id").primaryKey(),
+  userId: uuid("user_id").notNull(),
 
   name: varchar("name", { length: 64 }).notNull(),
-  symbols: json("symbols").$type<string[]>().default([]),
-  isDefault: boolean("isDefault").default(false),
+  symbols: jsonb("symbols").$type<string[]>().default([]),
+  isDefault: boolean("is_default").default(false),
 
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-}, (table) => ({
-  userIdIdx: index("watchlists_userId_idx").on(table.userId),
-}));
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [{
+  userIdIdx: index("watchlists_user_id_idx").on(table.userId),
+}]);
 
 export type Watchlist = typeof watchlists.$inferSelect;
 export type InsertWatchlist = typeof watchlists.$inferInsert;
@@ -374,48 +388,34 @@ export type InsertWatchlist = typeof watchlists.$inferInsert;
 // RISK ALERTS
 // ============================================
 
-export const riskAlerts = mysqlTable("risk_alerts", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  accountId: int("accountId").notNull(),
+export const riskAlerts = pgTable("risk_alerts", {
+  id: serial("id").primaryKey(),
+  userId: uuid("user_id").notNull(),
+  accountId: integer("account_id").notNull(),
 
   // Alert Type
-  alertType: mysqlEnum("alertType", [
-    "daily_loss_limit",
-    "max_drawdown",
-    "position_limit",
-    "volatility_spike",
-    "margin_call",
-    "system_error",
-    "circuit_breaker",
-  ]).notNull(),
+  alertType: alertTypeEnum("alert_type").notNull(),
 
-  severity: mysqlEnum("severity", ["warning", "critical"]).notNull(),
+  severity: riskSeverityEnum("severity").notNull(),
   message: text("message").notNull(),
 
   // Action Taken
-  actionTaken: mysqlEnum("actionTaken", [
-    "none",
-    "notified_user",
-    "paused_trading",
-    "closed_positions",
-    "emergency_stop",
-  ]).default("none"),
+  actionTaken: actionTakenEnum("action_taken").default("none"),
 
   // Status
-  isResolved: boolean("isResolved").default(false),
-  resolvedAt: timestamp("resolvedAt"),
-  resolvedBy: varchar("resolvedBy", { length: 64 }),
+  isResolved: boolean("is_resolved").default(false),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedBy: varchar("resolved_by", { length: 64 }),
 
   // Metadata
-  metadata: json("metadata"),
+  metadata: jsonb("metadata"),
 
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-}, (table) => ({
-  userIdIdx: index("risk_alerts_userId_idx").on(table.userId),
-  alertTypeIdx: index("risk_alerts_alertType_idx").on(table.alertType),
-  isResolvedIdx: index("risk_alerts_isResolved_idx").on(table.isResolved),
-}));
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [{
+  userIdIdx: index("risk_alerts_user_id_idx").on(table.userId),
+  alertTypeIdx: index("risk_alerts_alert_type_idx").on(table.alertType),
+  isResolvedIdx: index("risk_alerts_is_resolved_idx").on(table.isResolved),
+}]);
 
 export type RiskAlert = typeof riskAlerts.$inferSelect;
 export type InsertRiskAlert = typeof riskAlerts.$inferInsert;
@@ -424,15 +424,15 @@ export type InsertRiskAlert = typeof riskAlerts.$inferInsert;
 // TRADING STRATEGIES
 // ============================================
 
-export const strategies = mysqlTable("strategies", {
+export const strategies = pgTable("strategies", {
   id: varchar("id", { length: 64 }).primaryKey(),
-  userId: int("userId"),
+  userId: uuid("user_id"),
 
   name: varchar("name", { length: 128 }).notNull(),
   description: text("description"),
 
   // Configuration
-  config: json("config").$type<{
+  config: jsonb("config").$type<{
     indicators: string[];
     entryConditions: Record<string, unknown>;
     exitConditions: Record<string, unknown>;
@@ -440,7 +440,7 @@ export const strategies = mysqlTable("strategies", {
   }>(),
 
   // Backtest Results
-  backtestResults: json("backtestResults").$type<{
+  backtestResults: jsonb("backtestResults").$type<{
     totalReturn: number;
     maxDrawdown: number;
     sharpeRatio: number;
@@ -451,15 +451,15 @@ export const strategies = mysqlTable("strategies", {
   }>(),
 
   // Status
-  isActive: boolean("isActive").default(true),
-  isPublic: boolean("isPublic").default(false),
+  isActive: boolean("is_active").default(true),
+  isPublic: boolean("is_public").default(false),
 
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-}, (table) => ({
-  userIdIdx: index("strategies_userId_idx").on(table.userId),
-  isActiveIdx: index("strategies_isActive_idx").on(table.isActive),
-}));
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [{
+  userIdIdx: index("strategies_user_id_idx").on(table.userId),
+  isActiveIdx: index("strategies_is_active_idx").on(table.isActive),
+}]);
 
 export type Strategy = typeof strategies.$inferSelect;
 export type InsertStrategy = typeof strategies.$inferInsert;
@@ -468,39 +468,29 @@ export type InsertStrategy = typeof strategies.$inferInsert;
 // NOTIFICATIONS
 // ============================================
 
-export const notifications = mysqlTable("notifications", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: uuid("user_id").notNull(),
 
-  type: mysqlEnum("type", [
-    "trade_executed",
-    "trade_filled",
-    "trade_canceled",
-    "position_closed",
-    "risk_alert",
-    "daily_summary",
-    "deposit_received",
-    "withdrawal_processed",
-    "system_announcement",
-  ]).notNull(),
+  type: notificationTypeEnum("type").notNull(),
 
   title: varchar("title", { length: 128 }).notNull(),
   message: text("message").notNull(),
-  data: json("data"),
+  data: jsonb("data"),
 
-  isRead: boolean("isRead").default(false),
-  readAt: timestamp("readAt"),
+  isRead: boolean("is_read").default(false),
+  readAt: timestamp("read_at"),
 
   // Push notification tracking
-  isPushed: boolean("isPushed").default(false),
-  pushedAt: timestamp("pushedAt"),
+  isPushed: boolean("is_pushed").default(false),
+  pushedAt: timestamp("pushed_at"),
 
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-}, (table) => ({
-  userIdIdx: index("notifications_userId_idx").on(table.userId),
-  isReadIdx: index("notifications_isRead_idx").on(table.isRead),
-  createdAtIdx: index("notifications_createdAt_idx").on(table.createdAt),
-}));
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [{
+  userIdIdx: index("notifications_user_id_idx").on(table.userId),
+  isReadIdx: index("notifications_is_read_idx").on(table.isRead),
+  createdAtIdx: index("notifications_created_at_idx").on(table.createdAt),
+}]);
 
 export type Notification = typeof notifications.$inferSelect;
 export type InsertNotification = typeof notifications.$inferInsert;

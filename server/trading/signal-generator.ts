@@ -24,7 +24,7 @@ import {
 // TYPES
 // ============================================
 
-export type SignalType = 'entry_long' | 'entry_short' | 'exit' | 'hold';
+export type SignalType = 'buy' | 'strong_buy' | 'sell' | 'strong_sell' | 'neutral';
 export type SignalStrength = 'weak' | 'moderate' | 'strong';
 
 export interface TradingSignal {
@@ -311,7 +311,7 @@ export class SignalGenerator {
 
         // Determine signal type and strength
         if (overall > 0.4) {
-            signalType = 'entry_long';
+            signalType = overall > 0.6 ? 'strong_buy' : 'buy';
             strength = overall > 0.6 ? 'strong' : overall > 0.5 ? 'moderate' : 'weak';
 
             // Calculate targets for long
@@ -321,7 +321,7 @@ export class SignalGenerator {
 
             reason = this.generateLongReason(indicators, scores);
         } else if (overall < -0.4) {
-            signalType = 'entry_short';
+            signalType = overall < -0.6 ? 'strong_sell' : 'sell';
             strength = overall < -0.6 ? 'strong' : overall < -0.5 ? 'moderate' : 'weak';
 
             // Calculate targets for short
@@ -331,7 +331,7 @@ export class SignalGenerator {
 
             reason = this.generateShortReason(indicators, scores);
         } else {
-            signalType = 'hold';
+            signalType = 'neutral';
             strength = 'weak';
             confidence = 0.5;
             reason = 'No clear trend or opportunity. Waiting for better setup.';

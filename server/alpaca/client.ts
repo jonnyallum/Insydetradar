@@ -132,6 +132,32 @@ export class AlpacaClient {
         return parseFloat(account.portfolio_value);
     }
 
+    /**
+     * Get portfolio history (equity and profit/loss over time)
+     */
+    async getPortfolioHistory(options: {
+        period?: '1D' | '1W' | '1M' | '3M' | '1Y' | 'all';
+        timeframe?: '1Min' | '5Min' | '15Min' | '1H' | '1D';
+        date_end?: string;
+        extended_hours?: boolean;
+    } = {}): Promise<{
+        timestamp: number[];
+        equity: (number | null)[];
+        profit_loss: (number | null)[];
+        profit_loss_pct: (number | null)[];
+        base_value: number;
+        timeframe: string;
+    }> {
+        const params = new URLSearchParams();
+        if (options.period) params.set('period', options.period);
+        if (options.timeframe) params.set('timeframe', options.timeframe);
+        if (options.date_end) params.set('date_end', options.date_end);
+        if (options.extended_hours !== undefined) params.set('extended_hours', options.extended_hours.toString());
+
+        const query = params.toString();
+        return this.request(`/v2/account/portfolio/history${query ? `?${query}` : ''}`);
+    }
+
     // ============================================
     // ORDER OPERATIONS
     // ============================================

@@ -12,6 +12,7 @@ import type { AlpacaBar, AlpacaOrder, CreateOrderRequest } from '../alpaca/types
 import { SignalGenerator, getSignalGenerator, type TradingSignal } from './signal-generator';
 import { RiskManager, getRiskManager, type PortfolioState, type PositionInfo } from './risk-manager';
 import type { OHLCV } from './indicators';
+import { notificationService } from '../notification-service';
 
 // ============================================
 // TYPES
@@ -23,6 +24,7 @@ export interface TradingEngineConfig {
     demoMode: boolean;
     checkIntervalMs: number;
     maxConcurrentOrders: number;
+    ownerId?: string;
 }
 
 export interface EngineState {
@@ -121,7 +123,7 @@ export class TradingEngine {
         console.log(`[TradingEngine] Symbols: ${this.config.symbols.join(', ')}`);
 
         // Start the main trading loop
-        this.checkInterval = setInterval(() => this.runTradingCycle(), this.config.checkIntervalMs);
+        this.checkInterval = setInterval(() => this.runTradingCycle(), this.config.checkIntervalMs) as any;
 
         // Run immediately
         await this.runTradingCycle();
@@ -178,6 +180,15 @@ export class TradingEngine {
         }
 
         console.log(`[TradingEngine] Emergency stop complete. Closed ${closedPositions.length} positions`);
+
+        // Notify owner
+        if (this.config.ownerId) {
+            notificationService.sendToUser(
+                this.config.ownerId,
+                '🚨 Emergency Stop Triggered',
+                `Automated trading has been halted and ${closedPositions.length} positions closed.`
+            );
+        }
 
         return {
             success: true,
@@ -358,7 +369,7 @@ export class TradingEngine {
                 const { signal, rawScores } = result;
 
                 // Only act on entry signals
-                if (signal.signalType !== 'entry_long' && signal.signalType !== 'entry_short') continue;
+                if (signal.signalType === 'neutral') continue;
 
                 console.log(`[TradingEngine] ${symbol}: ${signal.signalType.toUpperCase()} signal (${(signal.confidence * 100).toFixed(1)}%)`);
 
@@ -372,7 +383,7 @@ export class TradingEngine {
                 const riskCheck = this.riskManager.checkTradeRisk(
                     portfolio,
                     symbol,
-                    signal.signalType === 'entry_long' ? 'buy' : 'sell',
+                    ['buy', 'strong_buy'].includes(signal.signalType) ? 'buy' : 'sell',
                     1, // Will be calculated by position sizing
                     currentPrice,
                     signal.confidence,
@@ -428,7 +439,7 @@ export class TradingEngine {
     ): Promise<void> {
         if (!this.client) return;
 
-        const side = signal.signalType === 'entry_long' ? 'buy' : 'sell';
+        const side = ['buy', 'strong_buy'].includes(signal.signalType) ? 'buy' : 'sell';
 
         console.log(`[TradingEngine] Executing ${side.toUpperCase()} ${quantity} ${symbol} @ ~${price}`);
         console.log(`[TradingEngine] SL: ${stopLoss}, TP: ${takeProfit}`);
@@ -459,6 +470,15 @@ export class TradingEngine {
             this.todayTrades++;
 
             console.log(`[TradingEngine] ✅ Order submitted: ${order.id}`);
+
+            // Notify owner
+            if (this.config.ownerId) {
+                notificationService.sendToUser(
+                    this.config.ownerId,
+                    `💰 Trade Executed: ${symbol}`,
+                    `${side.toUpperCase()} ${quantity} shares at $${price.toFixed(2)}`
+                );
+            }
 
         } catch (error) {
             this.addError(`Failed to execute ${symbol} trade: ${error}`);

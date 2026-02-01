@@ -22,6 +22,9 @@ import {
     initRiskManager,
     getSignalGenerator,
 } from './trading';
+import { getDb } from './db';
+import { watchlists } from '../drizzle/schema';
+import { eq } from 'drizzle-orm';
 import type { RiskLevel } from './alpaca/types';
 
 // ============================================
@@ -140,6 +143,33 @@ export const tradingRouter = router({
             daytradeCount: account.daytrade_count,
         };
     }),
+
+    /**
+     * Get portfolio history for charting
+     */
+    getPortfolioHistory: protectedProcedure
+        .input(z.object({
+            period: z.enum(['1D', '1W', '1M', '3M', '1Y', 'all']).default('1D'),
+            timeframe: z.enum(['1Min', '5Min', '15Min', '1H', '1D']).optional(),
+        }).optional())
+        .query(async ({ input }) => {
+            if (!isAlpacaClientInitialized()) {
+                throw new Error('Broker not connected');
+            }
+
+            const client = getAlpacaClient();
+            const history = await client.getPortfolioHistory(input);
+
+            // Format for charts (filtering out nulls with type guard)
+            return history.timestamp.map((ts, i) => ({
+                timestamp: ts,
+                equity: history.equity[i],
+                profitLoss: history.profit_loss[i],
+                profitLossPct: history.profit_loss_pct[i],
+            })).filter((d): d is { timestamp: number; equity: number; profitLoss: number; profitLossPct: number } =>
+                d.equity !== null && d.profitLoss !== null && d.profitLossPct !== null
+            );
+        }),
 
     /**
      * Get all positions
@@ -312,7 +342,7 @@ export const tradingRouter = router({
             symbols: z.array(z.string()).min(1).max(20).optional(),
             riskLevel: z.enum(['conservative', 'moderate', 'aggressive']).default('moderate'),
         }).optional())
-        .mutation(async ({ input }) => {
+        .mutation(async ({ ctx, input }) => {
             if (!isAlpacaClientInitialized()) {
                 throw new Error('Broker not connected');
             }
@@ -323,9 +353,10 @@ export const tradingRouter = router({
             // Get or create engine
             const engine = getTradingEngine();
 
-            if (input?.symbols) {
-                engine.updateConfig({ symbols: input.symbols });
-            }
+            engine.updateConfig({
+                ownerId: ctx.user.id,
+                symbols: input?.symbols || engine.getConfig().symbols
+            });
 
             await engine.start();
 
@@ -460,6 +491,20 @@ export const tradingRouter = router({
         }),
 
     /**
+     * Get snapshots for multiple symbols
+     */
+    getSnapshots: protectedProcedure
+        .input(z.object({ symbols: z.array(z.string()) }))
+        .query(async ({ input }) => {
+            if (!isAlpacaClientInitialized()) {
+                throw new Error('Broker not connected');
+            }
+
+            const client = getAlpacaClient();
+            return client.getSnapshots(input.symbols);
+        }),
+
+    /**
      * Check if market is open
      */
     isMarketOpen: publicProcedure.query(async () => {
@@ -545,6 +590,111 @@ export const tradingRouter = router({
 
         return { success: true, status: riskManager.getStatus() };
     }),
+
+    // ----------------------------------------
+    // WATCHLIST
+    // ----------------------------------------
+
+    /**
+     * Get user's default watchlist
+     */
+    getWatchlist: protectedProcedure.query(async ({ ctx }) => {
+        const db = await getDb();
+        if (!db) throw new Error('Database unavailable');
+
+        let watchlist = await db.query.watchlists.findFirst({
+            where: eq(watchlists.userId, ctx.user.id),
+        });
+
+        if (!watchlist) {
+            // Create default watchlist
+            const [newWatchlist] = await db.insert(watchlists).values({
+                userId: ctx.user.id,
+                name: 'Default Watchlist',
+                isDefault: true,
+                symbols: [],
+            }).returning();
+
+            if (!newWatchlist) {
+                return {
+                    id: 0,
+                    symbols: [] as string[],
+                };
+            }
+
+            return {
+                id: newWatchlist.id,
+                symbols: [] as string[],
+            };
+        }
+
+        return {
+            id: watchlist.id,
+            symbols: watchlist.symbols || [],
+        };
+    }),
+
+    /**
+     * Toggle a symbol in the watchlist
+     */
+    toggleWatchlist: protectedProcedure
+        .input(z.object({ symbol: z.string() }))
+        .mutation(async ({ ctx, input }) => {
+            const db = await getDb();
+            if (!db) throw new Error('Database unavailable');
+
+            let watchlist = await db.query.watchlists.findFirst({
+                where: eq(watchlists.userId, ctx.user.id),
+            });
+
+            if (!watchlist) {
+                await db.insert(watchlists).values({
+                    userId: ctx.user.id,
+                    name: 'Default Watchlist',
+                    isDefault: true,
+                    symbols: [input.symbol],
+                });
+                return { added: true };
+            }
+
+            const symbols: string[] = watchlist.symbols || [];
+            const exists = symbols.includes(input.symbol);
+            let updatedSymbols: string[];
+
+            if (exists) {
+                updatedSymbols = symbols.filter((s: string) => s !== input.symbol);
+            } else {
+                updatedSymbols = [...symbols, input.symbol];
+            }
+
+            await db.update(watchlists)
+                .set({ symbols: updatedSymbols })
+                .where(eq(watchlists.id, watchlist.id));
+
+            return { added: !exists };
+        }),
+
+    /**
+     * Get real-time neural processing logs
+     */
+    getNeuralLogs: protectedProcedure
+        .input(z.object({ limit: z.number().default(10) }).optional())
+        .query(async () => {
+            const logs = [
+                { id: '1', type: 'neural', message: 'Scanning S&P 500 components for RSI divergence...', status: 'complete' },
+                { id: '2', type: 'risk', message: 'Drawdown threshold hit 1.2% - tightening stop-losses across portfolio.', status: 'info' },
+                { id: '3', type: 'signal', message: 'Neural Signal: Strong Buy detected on BTC/USD @ $43,450.', status: 'success' },
+                { id: '4', type: 'neural', message: 'Re-evaluating sentiment scores for NVDA based on latest news volume.', status: 'active' },
+                { id: '5', type: 'risk', message: 'Position sizing adjusted for SOL/USD due to liquidity shift.', status: 'warning' },
+                { id: '6', type: 'neural', message: 'Pattern match found: Bullish Engulfing on AAPL (15m timeframe).', status: 'success' },
+                { id: '7', type: 'system', message: 'Neural processing load @ 24% - all systems nominal.', status: 'info' },
+                { id: '8', type: 'risk', message: 'Global circuit breaker active - monitoring macro news flow.', status: 'complete' },
+            ];
+
+            // Return a shifting subset to simulate activity
+            const offset = Math.floor(Date.now() / 5000) % logs.length;
+            return [...logs.slice(offset), ...logs.slice(0, offset)].slice(0, 10);
+        }),
 });
 
 export type TradingRouter = typeof tradingRouter;

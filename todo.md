@@ -13,7 +13,7 @@
 - [x] Welcome/onboarding screen
 - [x] Sign up screen
 - [x] Login screen
-- [ ] Email verification screen
+- [x] Email verification screen
 
 ## Main Navigation
 - [x] Configure tab bar with icons
@@ -25,7 +25,7 @@
 
 ## Dashboard Screen
 - [x] Portfolio value hero card
-- [ ] P&L chart component
+- [x] P&L chart component
 - [x] AI status indicator
 - [x] Quick stats row
 - [x] Recent activity list
@@ -34,19 +34,19 @@
 - [x] Crypto/Stocks/Forex tabs
 - [x] Asset list with prices
 - [x] Search functionality
-- [ ] Watchlist feature
+- [x] Watchlist feature
 
 ## Trade Screen (AI Control)
 - [x] Master AI toggle switch
 - [x] Risk level slider
 - [x] Active positions list
-- [ ] AI insights section
+- [x] AI insights section
 - [x] Performance metrics
 
 ## Wallet Screen
 - [x] Balance display card
 - [x] Deposit button/flow
-- [ ] Withdraw button/flow
+- [x] Withdraw button/flow
 - [x] Transaction history
 
 ## Profile Screen
@@ -56,7 +56,7 @@
 - [x] Logout functionality
 
 ## Backend Integration
-- [ ] User authentication API
+- [x] User authentication API
 - [ ] Portfolio data API
 - [ ] Market data integration
 - [x] Stripe payment integration

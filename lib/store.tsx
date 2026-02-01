@@ -7,6 +7,7 @@ export interface User {
   email: string;
   name: string;
   avatar?: string;
+  isEmailVerified?: boolean;
 }
 
 export interface Position {
@@ -36,12 +37,12 @@ export interface AppState {
   isAuthenticated: boolean;
   user: User | null;
   hasCompletedOnboarding: boolean;
-  
+
   // Trading
   isDemoMode: boolean;
   isAITrading: boolean;
   riskLevel: 'conservative' | 'moderate' | 'aggressive';
-  
+
   // Portfolio
   balance: number;
   portfolioValue: number;
@@ -49,7 +50,7 @@ export interface AppState {
   totalPnlPercent: number;
   positions: Position[];
   transactions: Transaction[];
-  
+
   // UI
   isLoading: boolean;
 }
@@ -67,6 +68,7 @@ type Action =
   | { type: 'SET_POSITIONS'; payload: Position[] }
   | { type: 'ADD_TRANSACTION'; payload: Transaction }
   | { type: 'SET_TRANSACTIONS'; payload: Transaction[] }
+  | { type: 'VERIFY_EMAIL' }
   | { type: 'RESTORE_STATE'; payload: Partial<AppState> };
 
 const initialState: AppState = {
@@ -93,11 +95,17 @@ function reducer(state: AppState, action: Action): AppState {
       return { ...state, isAuthenticated: true, user: action.payload };
     case 'LOGOUT':
       return { ...initialState, hasCompletedOnboarding: state.hasCompletedOnboarding, isLoading: false };
+    case 'VERIFY_EMAIL':
+      if (!state.user) return state;
+      return { 
+        ...state, 
+        user: { ...state.user, isEmailVerified: true } 
+      };
     case 'COMPLETE_ONBOARDING':
       return { ...state, hasCompletedOnboarding: true };
     case 'SET_DEMO_MODE':
-      return { 
-        ...state, 
+      return {
+        ...state,
         isDemoMode: action.payload,
         balance: action.payload ? 100000 : 0,
         portfolioValue: action.payload ? 100000 : 0,
@@ -112,8 +120,8 @@ function reducer(state: AppState, action: Action): AppState {
     case 'UPDATE_BALANCE':
       return { ...state, balance: action.payload };
     case 'UPDATE_PORTFOLIO':
-      return { 
-        ...state, 
+      return {
+        ...state,
         portfolioValue: action.payload.portfolioValue,
         totalPnl: action.payload.totalPnl,
         totalPnlPercent: action.payload.totalPnlPercent,

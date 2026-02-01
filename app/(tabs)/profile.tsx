@@ -7,15 +7,17 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import * as Haptics from 'expo-haptics';
 import { Platform } from 'react-native';
 
-function SettingsItem({ 
-  icon, 
-  label, 
-  value, 
-  onPress, 
+import { PremiumCard } from '@/components/ui/premium-card';
+
+function SettingsItem({
+  icon,
+  label,
+  value,
+  onPress,
   showArrow = true,
   color = '#8B92A0',
   danger = false,
-}: { 
+}: {
   icon: any;
   label: string;
   value?: string;
@@ -27,38 +29,38 @@ function SettingsItem({
   return (
     <TouchableOpacity
       onPress={onPress}
-      className="bg-surface rounded-xl p-4 border border-border flex-row items-center"
+      className="bg-surface/50 rounded-2xl p-4 border border-border flex-row items-center"
       activeOpacity={onPress ? 0.7 : 1}
     >
-      <View 
-        className="w-10 h-10 rounded-full items-center justify-center mr-4"
-        style={{ backgroundColor: danger ? '#FF336620' : `${color}20` }}
+      <View
+        className="w-10 h-10 rounded-xl items-center justify-center mr-4"
+        style={{ backgroundColor: danger ? '#FF336610' : `${color}10`, borderWidth: 1, borderColor: danger ? '#FF336630' : `${color}30` }}
       >
         <IconSymbol name={icon} size={20} color={danger ? '#FF3366' : color} />
       </View>
-      
+
       <View className="flex-1">
-        <Text className={`font-semibold ${danger ? 'text-error' : 'text-foreground'}`}>
+        <Text className={`font-black tracking-tight ${danger ? 'text-error' : 'text-foreground'}`}>
           {label}
         </Text>
-        {value && <Text className="text-muted text-sm">{value}</Text>}
+        {value && <Text className="text-muted/60 text-xs font-bold uppercase tracking-widest leading-3 mt-1">{value}</Text>}
       </View>
-      
+
       {showArrow && (
-        <IconSymbol name="chevron.right" size={18} color="#6B7280" />
+        <IconSymbol name="chevron.right" size={18} color="#4B5563" />
       )}
     </TouchableOpacity>
   );
 }
 
-function SettingsToggle({ 
-  icon, 
-  label, 
+function SettingsToggle({
+  icon,
+  label,
   description,
-  value, 
+  value,
   onToggle,
   color = '#00F0FF',
-}: { 
+}: {
   icon: any;
   label: string;
   description?: string;
@@ -67,19 +69,19 @@ function SettingsToggle({
   color?: string;
 }) {
   return (
-    <View className="bg-surface rounded-xl p-4 border border-border flex-row items-center">
-      <View 
-        className="w-10 h-10 rounded-full items-center justify-center mr-4"
-        style={{ backgroundColor: `${color}20` }}
+    <View className="bg-surface/50 rounded-2xl p-4 border border-border flex-row items-center">
+      <View
+        className="w-10 h-10 rounded-xl items-center justify-center mr-4"
+        style={{ backgroundColor: `${color}10`, borderWidth: 1, borderColor: `${color}30` }}
       >
         <IconSymbol name={icon} size={20} color={color} />
       </View>
-      
+
       <View className="flex-1">
-        <Text className="text-foreground font-semibold">{label}</Text>
-        {description && <Text className="text-muted text-sm">{description}</Text>}
+        <Text className="text-foreground font-black tracking-tight">{label}</Text>
+        {description && <Text className="text-muted/60 text-xs font-bold uppercase tracking-widest leading-3 mt-1">{description}</Text>}
       </View>
-      
+
       <Switch
         value={value}
         onValueChange={(newValue) => {
@@ -101,19 +103,19 @@ export default function ProfileScreen() {
   const { isDemoMode, setDemoMode } = useTrading();
   const { dispatch } = useApp();
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  
+
   const handleLogout = () => {
     if (Platform.OS === 'web') {
       logout();
       router.replace('/(auth)/login');
     } else {
       Alert.alert(
-        'Logout',
-        'Are you sure you want to logout?',
+        'OPERATIONAL SHUTDOWN',
+        'Are you sure you want to terminate the current session?',
         [
-          { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Logout', 
+          { text: 'ABORT', style: 'cancel' },
+          {
+            text: 'TERMINATE',
             style: 'destructive',
             onPress: () => {
               logout();
@@ -124,19 +126,19 @@ export default function ProfileScreen() {
       );
     }
   };
-  
+
   const handleDemoModeToggle = (enabled: boolean) => {
     if (Platform.OS === 'web') {
       setDemoMode(enabled);
     } else {
       if (!enabled) {
         Alert.alert(
-          'Switch to Live Trading',
-          'You are about to switch to live trading mode. Real money will be used for trades.',
+          'LIVE TRADING PROTOCOL',
+          'You are initiating Live Trading. REAL CAPITAL will be deployed. Ensure your risk management is configured.',
           [
-            { text: 'Cancel', style: 'cancel' },
-            { 
-              text: 'Switch to Live', 
+            { text: 'ABORT', style: 'cancel' },
+            {
+              text: 'ENGAGE LIVE',
               onPress: () => setDemoMode(false)
             },
           ]
@@ -146,145 +148,144 @@ export default function ProfileScreen() {
       }
     }
   };
-  
+
   return (
     <ScreenContainer>
-      <ScrollView 
+      <ScrollView
         className="flex-1 bg-background"
         contentContainerStyle={{ padding: 20, paddingBottom: 40 }}
         showsVerticalScrollIndicator={false}
       >
         {/* Header */}
-        <View className="mb-6">
-          <Text className="text-foreground text-2xl font-bold">Profile</Text>
-          <Text className="text-muted">Manage your account</Text>
+        <View className="mb-8 pt-4">
+          <Text className="text-muted/60 text-xs font-bold uppercase tracking-widest mb-1">System User</Text>
+          <Text className="text-foreground text-3xl font-black">Profile</Text>
         </View>
-        
+
         {/* User Card */}
-        <View className="bg-surface rounded-2xl p-5 border border-border mb-6 flex-row items-center">
-          <View className="w-16 h-16 rounded-full bg-primary/20 items-center justify-center mr-4">
-            <Text className="text-primary text-2xl font-bold">
-              {user?.name?.charAt(0).toUpperCase() || 'U'}
-            </Text>
+        <PremiumCard hasGlow={true} glowColor="#00F0FF" className="mb-10">
+          <View className="flex-row items-center">
+            <View className="w-20 h-20 rounded-2xl bg-primary/10 items-center justify-center mr-5 border border-primary/30">
+              <Text className="text-primary text-3xl font-black">
+                {user?.name?.charAt(0).toUpperCase() || 'U'}
+              </Text>
+            </View>
+            <View className="flex-1">
+              <Text className="text-foreground text-xl font-black tracking-tight">{user?.name || 'Authorized Trader'}</Text>
+              <Text className="text-muted/60 text-xs font-bold uppercase tracking-widest">{user?.email || 'trader@insydetradar.app'}</Text>
+              {isDemoMode && (
+                <View className="mt-3 bg-warning/20 px-3 py-1 rounded-lg border border-warning/30 self-start">
+                  <Text className="text-warning text-[9px] font-black uppercase tracking-tighter">SIMULATION MODE ACTIVE</Text>
+                </View>
+              )}
+            </View>
           </View>
-          <View className="flex-1">
-            <Text className="text-foreground text-lg font-semibold">{user?.name || 'User'}</Text>
-            <Text className="text-muted">{user?.email || 'user@example.com'}</Text>
-            {isDemoMode && (
-              <View className="mt-2 bg-warning/20 px-3 py-1 rounded-full self-start">
-                <Text className="text-warning text-xs font-semibold">DEMO MODE</Text>
-              </View>
-            )}
-          </View>
-        </View>
-        
+        </PremiumCard>
+
         {/* Trading Settings */}
-        <View className="mb-6">
-          <Text className="text-muted text-sm font-semibold mb-3 px-1">TRADING</Text>
+        <View className="mb-8">
+          <Text className="text-muted/60 text-[10px] font-black uppercase tracking-[0.2em] mb-4 px-1">Trading Environment</Text>
           <View className="gap-3">
             <SettingsToggle
               icon="power"
-              label="Demo Mode"
-              description={isDemoMode ? 'Trading with virtual money' : 'Trading with real money'}
-              value={isDemoMode}
-              onToggle={handleDemoModeToggle}
+              label="Live Markets Access"
+              description={isDemoMode ? 'SIMULATED DATA' : 'REAL CAPITAL ACCESS'}
+              value={!isDemoMode}
+              onToggle={(v) => handleDemoModeToggle(!v)}
               color={isDemoMode ? '#FFB800' : '#39FF14'}
             />
           </View>
         </View>
-        
+
         {/* Notifications */}
-        <View className="mb-6">
-          <Text className="text-muted text-sm font-semibold mb-3 px-1">NOTIFICATIONS</Text>
+        <View className="mb-8">
+          <Text className="text-muted/60 text-[10px] font-black uppercase tracking-[0.2em] mb-4 px-1">Comms Protocol</Text>
           <View className="gap-3">
             <SettingsToggle
               icon="bell.fill"
-              label="Push Notifications"
-              description="Trade alerts and updates"
+              label="Push Manifest"
+              description="Trade execution alerts"
               value={notificationsEnabled}
               onToggle={setNotificationsEnabled}
               color="#FF00E5"
             />
           </View>
         </View>
-        
+
         {/* Account Settings */}
-        <View className="mb-6">
-          <Text className="text-muted text-sm font-semibold mb-3 px-1">ACCOUNT</Text>
+        <View className="mb-8">
+          <Text className="text-muted/60 text-[10px] font-black uppercase tracking-[0.2em] mb-4 px-1">Security & Access</Text>
           <View className="gap-3">
             <SettingsItem
               icon="person.fill"
-              label="Edit Profile"
+              label="Identity Profile"
               color="#00F0FF"
             />
             <SettingsItem
               icon="lock.fill"
-              label="Security"
-              value="Password, 2FA"
+              label="Biometric Security"
+              value="Verified"
               color="#39FF14"
             />
             <SettingsItem
               icon="creditcard.fill"
-              label="Payment Methods"
-              value="Manage cards"
+              label="Payment Channels"
+              value="Primary Method Set"
               color="#FFB800"
             />
           </View>
         </View>
-        
+
         {/* Support */}
-        <View className="mb-6">
-          <Text className="text-muted text-sm font-semibold mb-3 px-1">SUPPORT</Text>
+        <View className="mb-8">
+          <Text className="text-muted/60 text-[10px] font-black uppercase tracking-[0.2em] mb-4 px-1">Support Module</Text>
           <View className="gap-3">
             <SettingsItem
               icon="info.circle.fill"
-              label="Help Center"
+              label="Documentation"
               color="#00F0FF"
             />
             <SettingsItem
               icon="envelope.fill"
-              label="Contact Support"
+              label="Direct Comms"
               color="#FF00E5"
             />
           </View>
         </View>
-        
+
         {/* Legal */}
-        <View className="mb-8">
-          <Text className="text-muted text-sm font-semibold mb-3 px-1">LEGAL</Text>
+        <View className="mb-10">
+          <Text className="text-muted/60 text-[10px] font-black uppercase tracking-[0.2em] mb-4 px-1">Legal Protocols</Text>
           <View className="gap-3">
             <SettingsItem
               icon="chevron.left.forwardslash.chevron.right"
-              label="Terms of Service"
-              color="#6B7280"
+              label="Terms of Engagement"
+              color="#4B5563"
             />
             <SettingsItem
               icon="lock.fill"
-              label="Privacy Policy"
-              color="#6B7280"
+              label="Privacy Manifest"
+              color="#4B5563"
             />
           </View>
         </View>
-        
+
         {/* Logout */}
-        <View className="mb-6">
+        <View className="mb-10">
           <TouchableOpacity
             onPress={handleLogout}
-            className="bg-error/20 border border-error rounded-xl p-4 flex-row items-center justify-center"
+            className="bg-error/5 border border-error/30 rounded-3xl p-6 flex-row items-center justify-center"
+            style={{ shadowColor: '#FF3366', shadowOpacity: 0.2, shadowRadius: 15 }}
           >
             <IconSymbol name="power" size={20} color="#FF3366" />
-            <Text className="text-error font-semibold ml-2">Logout</Text>
+            <Text className="text-error font-black ml-2 uppercase tracking-tight">Terminate Session</Text>
           </TouchableOpacity>
         </View>
-        
+
         {/* Version */}
-        <View className="items-center">
-          <Image 
-            source={require('@/assets/images/icon.png')} 
-            style={{ width: 40, height: 40, borderRadius: 8, marginBottom: 8, opacity: 0.5 }}
-          />
-          <Text className="text-muted text-sm">Insydetradar v1.0.0</Text>
-          <Text className="text-muted text-xs mt-1">AI-Powered Autonomous Trading</Text>
+        <View className="items-center pb-10">
+          <Text className="text-muted/40 text-[10px] font-black uppercase tracking-[0.3em]">Insydetradar v1.0.0-PRO</Text>
+          <Text className="text-muted/30 text-[9px] mt-1 font-bold">AUTONOMOUS TRADING INTERFACE</Text>
         </View>
       </ScrollView>
     </ScreenContainer>
