@@ -4,6 +4,7 @@ import postgres from "postgres";
 import { InsertUser, users } from "../drizzle/schema";
 import * as schema from "../drizzle/schema";
 import { ENV } from "./_core/env";
+import { emailSync } from "./services/email-sync";
 
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 
@@ -32,6 +33,9 @@ export async function upsertUser(user: InsertUser): Promise<void> {
   }
 
   try {
+    const existingUser = await getUserByOpenId(user.openId);
+    const isNewUser = !existingUser;
+
     const values: InsertUser = {
       openId: user.openId,
     };
@@ -84,6 +88,18 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       target: users.openId,
       set: updateSet as any,
     });
+
+    // 🚀 Pulse CRM Sync: New User Protocol
+    if (isNewUser && values.email) {
+      console.log(`[Database] Triggering tactical onboard for: ${values.email}`);
+      emailSync.syncUser({
+        email: values.email,
+        name: values.name || null
+      }).catch(err => console.error('[Database] Email sync failed:', err));
+
+      emailSync.sendWelcome(values.email, values.name || 'Operative')
+        .catch(err => console.error('[Database] Welcome email failed:', err));
+    }
   } catch (error) {
     console.error("[Database] Failed to upsert user:", error);
     throw error;
