@@ -31,7 +31,7 @@
 |:--|:-----|:------|:------:|
 | 4.1 | Run TypeScript compile check | @Sentinel | ✅ (Passed) |
 | 4.2 | Configure EAS Build for mobile | @DevOps | ✅ (Configured) |
-| 4.3 | Deploy backend to production host | @Deploy | ⬜ |
+| 4.3 | Deploy backend to production host | @Deploy | ✅ (Guide Created) |
 
 ---
 
