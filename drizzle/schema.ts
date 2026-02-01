@@ -48,6 +48,14 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   lastSignedIn: timestamp("last_signed_in").defaultNow().notNull(),
   pushToken: text("push_token"),
+  marketingOptIn: boolean("marketing_opt_in").default(false).notNull(),
+  metadata: jsonb("metadata").$type<{
+    lastLoginIp?: string;
+    campaign?: string;
+    source?: string;
+    referral?: string;
+    emailListId?: string;
+  }>(),
 });
 
 export type User = typeof users.$inferSelect;

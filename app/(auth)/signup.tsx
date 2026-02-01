@@ -5,6 +5,8 @@ import { ScreenContainer } from '@/components/screen-container';
 import { useApp } from '@/lib/store';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { trpc } from '@/lib/trpc';
+import { supabase } from '@/lib/supabase';
+import * as Linking from 'expo-linking';
 import * as Haptics from 'expo-haptics';
 
 export default function SignupScreen() {
@@ -63,6 +65,27 @@ export default function SignupScreen() {
 
     setError('');
     signupMutation.mutate({ name, email, password });
+  };
+
+  const handleGoogleLogin = async () => {
+    try {
+      const { data, error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: Linking.createURL('/oauth/callback'),
+          skipBrowserRedirect: !Platform.OS || Platform.OS === 'web' ? false : true,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.url) {
+        Linking.openURL(data.url);
+      }
+    } catch (err) {
+      console.error('[Auth] Google login failed:', err);
+      Alert.alert('IDENTITY ERROR', 'Failed to synchronize with Google identity protocol.');
+    }
   };
 
   return (
@@ -206,6 +229,26 @@ export default function SignupScreen() {
               <Text className="text-background font-bold text-lg">
                 {signupMutation.isPending ? 'Creating Account...' : 'Create Account'}
               </Text>
+            </TouchableOpacity>
+
+            {/* Divider */}
+            <View className="flex-row items-center mb-6">
+              <View className="flex-1 h-px bg-border" />
+              <Text className="text-muted mx-4">or</Text>
+              <View className="flex-1 h-px bg-border" />
+            </View>
+
+            {/* Google Signup Button */}
+            <TouchableOpacity
+              onPress={handleGoogleLogin}
+              className="bg-white py-4 rounded-2xl items-center mb-6 flex-row justify-center"
+              activeOpacity={0.9}
+            >
+              <Image
+                source={{ uri: 'https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.svg' }}
+                style={{ width: 24, height: 24, marginRight: 12 }}
+              />
+              <Text className="text-black font-bold text-base">Continue with Google</Text>
             </TouchableOpacity>
 
             {/* Login Link */}

@@ -22,6 +22,8 @@ import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-run
 import { registerForPushNotificationsAsync } from "@/lib/notifications";
 import * as Notifications from 'expo-notifications';
 import { useApp } from "@/lib/store";
+import { supabase } from "@/lib/supabase";
+import * as Auth from "@/lib/_core/auth";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -53,6 +55,52 @@ function NotificationManager() {
       };
     }
   }, [state.isAuthenticated]);
+
+  return null;
+}
+
+// Auth State Synchronization Component
+function AuthSyncManager() {
+  const { dispatch } = useApp();
+
+  useEffect(() => {
+    // Check initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session) {
+        handleAuthEvent('SIGNED_IN', session);
+      }
+    });
+
+    const handleAuthEvent = async (event: string, session: any) => {
+      console.log(`[AuthSync] Tactical Event: ${event}`);
+
+      if (session?.access_token) {
+        await Auth.setSessionToken(session.access_token);
+
+        if (session.user) {
+          dispatch({
+            type: 'LOGIN',
+            payload: {
+              id: session.user.id,
+              email: session.user.email || '',
+              name: session.user.user_metadata?.full_name || session.user.user_metadata?.name || 'Operative'
+            }
+          });
+        }
+      } else if (event === 'SIGNED_OUT') {
+        await Auth.removeSessionToken();
+        dispatch({ type: 'LOGOUT' });
+      }
+    };
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      handleAuthEvent(event, session);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [dispatch]);
 
   return null;
 }
@@ -110,6 +158,7 @@ export default function RootLayout() {
         <trpc.Provider client={trpcClient} queryClient={queryClient}>
           <QueryClientProvider client={queryClient}>
             <NotificationManager />
+            <AuthSyncManager />
             <Stack screenOptions={{ headerShown: false }}>
               <Stack.Screen name="(tabs)" />
               <Stack.Screen name="(auth)" options={{ presentation: "fullScreenModal" }} />

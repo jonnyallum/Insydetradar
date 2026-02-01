@@ -62,6 +62,16 @@ export async function upsertUser(user: InsertUser): Promise<void> {
       updateSet.role = "admin";
     }
 
+    if (user.marketingOptIn !== undefined) {
+      values.marketingOptIn = user.marketingOptIn;
+      updateSet.marketingOptIn = user.marketingOptIn;
+    }
+
+    if (user.metadata !== undefined) {
+      values.metadata = user.metadata;
+      updateSet.metadata = user.metadata;
+    }
+
     if (!values.lastSignedIn) {
       values.lastSignedIn = new Date();
     }
